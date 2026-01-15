@@ -1,16 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow any authenticated user to read/write availability
+    
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     match /availability/{document=**} {
       allow read, write: if request.auth != null;
     }
     
-    // Allow authenticated users to read users (needed for loading user names)
-    // Allow users to write their own profile
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // User can create their own profile
+      allow create: if request.auth != null && request.auth.uid == userId;
+      // User can update own, Admin can update all
+      allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      // Only Admin can delete
+      allow delete: if request.auth != null && isAdmin();
     }
   }
 }

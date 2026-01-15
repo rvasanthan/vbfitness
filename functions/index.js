@@ -73,3 +73,51 @@ exports.isApproved = functions.https.onCall(async (data, context) => {
 exports.getSeason = functions.https.onCall((data, context) => {
   return { start: "03-01", end: "11-30" };
 });
+
+// 5. Delete User (Admin Only)
+exports.deleteUser = functions.https.onCall(async (data, context) => {
+  // Check auth
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be logged in.');
+  }
+
+  // Check admin role
+  const callerUid = context.auth.uid;
+  const callerSnap = await db.collection('users').doc(callerUid).get();
+  const callerData = callerSnap.exists ? callerSnap.data() : {};
+  
+  if (callerData.role !== 'admin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only admins can delete users.');
+  }
+
+  const { uid } = data;
+  if (!uid) {
+    throw new functions.https.HttpsError('invalid-argument', 'UID is required.');
+  }
+
+  try {
+    // 1. Delete from Firebase Auth
+    await admin.auth().deleteUser(uid);
+    
+    // 2. Delete from Firestore Users
+    await db.collection('users').doc(uid).delete();
+    
+    // 3. Delete their availability
+    const batch = db.batch();
+    const availabilitySnap = await db.collection('availability').where('user_id', '==', uid).get();
+    availabilitySnap.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+
+    return { success: true };
+  } catch (error) {
+    console.error("Delete User Error:", error);
+    // If auth user not found, proceed to clean up firestore anyway
+    if (error.code === 'auth/user-not-found') {
+       await db.collection('users').doc(uid).delete();
+       return { success: true, message: "User deleted from DB (Auth user was already gone)" };
+    }
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});

@@ -25,6 +25,8 @@ import { db, auth, googleProvider } from './firebase';
 import { getSeasonWeekends, getHolidays } from './utils/dateHelpers';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
+import AdminPanel from './components/AdminPanel';
+import { ShieldAlert, Loader2, Lock } from 'lucide-react';
 
 export default function App() {
   const today = new Date();
@@ -39,7 +41,8 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [authReady, setAuthReady] = useState(false);
-  const [access, setAccess] = useState('unknown'); // 'unknown' | 'approved' | 'pending'
+  const [access, setAccess] = useState('unknown'); // 'unknown' | 'approved' | 'pending' | 'suspended'
+  const [showAdmin, setShowAdmin] = useState(false);
 
   const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 
@@ -53,31 +56,72 @@ export default function App() {
 
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Check allowlist
         try {
-          const email = (user.email || '').toLowerCase();
-          // CLIENT-SIDE CHECK (Since we are serverless on Spark plan)
           // 1. Check if user already exists
           const userRef = doc(db, 'users', user.uid);
           const userSnap = await getDoc(userRef);
           
+          let userData = null;
+
           if (userSnap.exists()) {
-             setAccess('approved');
-             ensureUserProfile(user).catch(console.error);
+             userData = userSnap.data();
+             // Respect stored status, default to approved if missing (legacy support)
+             setAccess(userData.status || 'approved');
           } else {
-             // 2. Open Beta: Approve everyone who signs in
-             setAccess('approved');
-             ensureUserProfile(user).catch(console.error);
+             // 2. New (or Deleted) User Check
+             
+             // ZOMBIE CHECK: If the Auth User was created more than 5 minutes ago
+             // but has no profile, it means they were likely DELETED by an admin.
+             // We should NOT auto-create a profile for them.
+             const creationTime = new Date(user.metadata.creationTime).getTime();
+             const now = Date.now();
+             const isRecentAuth = (now - creationTime) < (5 * 60 * 1000); // 5 minutes
+
+             // Special Check for First User (Bootstrap)
+             const q = query(collection(db, 'users'), limit(1));
+             const allSnap = await getDocs(q);
+             const isFirstUserEver = allSnap.empty;
+
+             if (isRecentAuth || isFirstUserEver) {
+                 // Genuine New User - Create Profile
+                 const initialStatus = isFirstUserEver ? 'approved' : 'pending';
+                 const initialRole = isFirstUserEver ? 'admin' : 'user';
+
+                 userData = {
+                    uid: user.uid,
+                    status: initialStatus,
+                    role: initialRole,
+                    name: user.displayName || user.email || 'Unknown player',
+                    email: user.email || ''
+                 };
+                 
+                 setAccess(initialStatus);
+                 await ensureUserProfile(user, initialStatus, initialRole);
+             } else {
+                 // Zombie User Case
+                 console.warn("Detected zombie user (old auth, missing profile). Treating as deleted.");
+                 setAccess('deleted');
+                 userData = { 
+                     uid: user.uid, 
+                     status: 'deleted',
+                     name: user.displayName,
+                     email: user.email
+                 };
+             }
           }
+          
+          setCurrentUser({
+             uid: user.uid,
+             name: userData.name || user.displayName || user.email,
+             email: userData.email || user.email,
+             role: userData.role || 'user',
+             status: userData.status || 'pending'
+          });
+
         } catch (e) {
-          console.error(e);
-          setAccess('approved'); // Default to approved on error for reliability
+          console.error("Auth Error:", e);
+          setAccess('pending'); // Fail safe
         }
-        setCurrentUser({
-          uid: user.uid,
-          name: user.displayName || user.email || 'Unknown player',
-          email: user.email || ''
-        });
       } else {
         setCurrentUser(null);
         setAccess('unknown');
@@ -89,10 +133,10 @@ export default function App() {
 
   // Sync Users when authenticated
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && access === 'approved') {
       loadUsers();
     }
-  }, [currentUser]);
+  }, [currentUser, access]);
 
   // Load Calendar Data
   useEffect(() => {
@@ -164,13 +208,15 @@ export default function App() {
     }
   }
 
-  async function ensureUserProfile(user) {
+  async function ensureUserProfile(user, status = 'pending', role = 'user') {
     const userRef = doc(db, 'users', user.uid);
     const snap = await getDoc(userRef);
     if (!snap.exists()) {
       await setDoc(userRef, {
         name: user.displayName || user.email || 'Unknown player',
         email: user.email || '',
+        role: role,
+        status: status,
         created_at: serverTimestamp()
       });
       await loadUsers(); // Refresh list immediately
@@ -248,7 +294,51 @@ export default function App() {
     return <AuthPage loading={true} />; 
   }
 
-  if (!currentUser || access === 'pending') {
+  if (access === 'suspended' || access === 'deleted') {
+    const isDeleted = access === 'deleted';
+    return (
+      <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 border border-red-500/20">
+          <ShieldAlert className="w-10 h-10 text-red-500" />
+        </div>
+        <h1 className="text-2xl font-bold text-white mb-2">{isDeleted ? 'Account Removed' : 'Account Suspended'}</h1>
+        <p className="text-navy-100/50 mb-8 max-w-md">
+          {isDeleted 
+            ? "Your account has been removed by an administrator. To join again, you must sign out and sign in to create a new request." 
+            : "Your account has been suspended by an administrator. Please contact specific club admins to resolve this issue."}
+        </p>
+        <button 
+          onClick={handleSignOut}
+          className="px-6 py-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition"
+        >
+          Sign Out
+        </button>
+      </div>
+    );
+  }
+
+  if (access === 'pending') {
+     return (
+        <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center p-6 text-center">
+           <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mb-6 border border-yellow-500/20 animate-pulse">
+              <Lock className="w-10 h-10 text-cricket-gold" />
+           </div>
+           <h1 className="text-2xl font-bold text-white mb-2">Pending Approval</h1>
+           <p className="text-navy-100/50 mb-8 max-w-md">Thanks for signing up! An administrator needs to approve your account before you can check in for practice.</p>
+           <button 
+              onClick={handleSignOut}
+              className="px-6 py-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition"
+           >
+              Sign Out
+           </button>
+           <div className="mt-8 pt-8 border-t border-navy-800/50 w-full max-w-xs">
+              <p className="text-xs text-navy-100/30">User ID: <span className="font-mono">{currentUser?.uid}</span></p>
+           </div>
+        </div>
+     );
+  }
+
+  if (!currentUser) {
     return (
       <AuthPage 
         onSignIn={handleSignIn}
@@ -262,20 +352,31 @@ export default function App() {
   }
 
   return (
-    <Dashboard 
-      user={currentUser}
-      users={users}
-      year={year}
-      setYear={setYear}
-      weekendDates={weekendDates}
-      holidays={holidays}
-      selectedDate={selectedDate}
-      setSelectedDate={setSelectedDate}
-      availability={availability}
-      onSetStatus={setMyStatus}
-      onSignOut={handleSignOut}
-      loading={loading}
-      statusMessage={statusMessage}
-    />
+    <>
+      <Dashboard 
+        user={currentUser}
+        users={users}
+        year={year}
+        setYear={setYear}
+        weekendDates={weekendDates}
+        holidays={holidays}
+        selectedDate={selectedDate}
+        setSelectedDate={setSelectedDate}
+        availability={availability}
+        onSetStatus={setMyStatus}
+        onSignOut={handleSignOut}
+        loading={loading}
+        statusMessage={statusMessage}
+        isAdmin={currentUser.role === 'admin'}
+        onOpenAdmin={() => setShowAdmin(true)}
+      />
+      {showAdmin && (
+         <AdminPanel 
+           users={users} 
+           onClose={() => setShowAdmin(false)} 
+           onRefresh={loadUsers}
+         />
+      )}
+    </>
   );
 }

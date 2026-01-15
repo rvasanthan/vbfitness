@@ -54,7 +54,7 @@ export default function AuthPage({
             <button
               onClick={onSignIn}
               disabled={loading}
-              className="w-full py-3.5 px-4 bg-white hover:bg-gray-50 text-navy-900 font-bold rounded-xl shadow-lg hover:shadow-white/10 transition-all duration-200 flex items-center justify-center gap-3 group transform hover:-translate-y-0.5"
+              className="w-full py-3.5 px-4 bg-white hover:bg-gray-50 text-navy-100 font-bold rounded-xl shadow-lg hover:shadow-white/10 transition-all duration-200 flex items-center justify-center gap-3 group transform hover:-translate-y-0.5"
             >
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt=""/>
               <span>Continue with Google</span>

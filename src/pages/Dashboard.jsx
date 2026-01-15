@@ -9,7 +9,8 @@ import {
   Info,
   Users,
   LayoutGrid,
-  Table
+  Table,
+  Shield
 } from 'lucide-react';
 import ConsolidatedRoster from '../components/ConsolidatedRoster';
 import { formatDayLabel, groupByMonth, parseLocalDate } from '../utils/dateHelpers';
@@ -27,7 +28,9 @@ export default function Dashboard({
   onSetStatus,
   onSignOut,
   loading,
-  statusMessage
+  statusMessage,
+  isAdmin,
+  onOpenAdmin
 }) {
   const [guestCount, setGuestCount] = useState(0);
   const [viewMode, setViewMode] = useState('calendar');
@@ -84,6 +87,15 @@ export default function Dashboard({
           </div>
           
           <div className="flex items-center gap-4">
+            {isAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                className="flex items-center gap-2 px-3 py-1.5 bg-cricket-gold/10 text-cricket-gold rounded-full border border-cricket-gold/20 hover:bg-cricket-gold/20 transition-colors font-bold text-xs uppercase tracking-wider"
+              >
+                <Shield size={14} />
+                <span className="hidden sm:inline">Admin</span>
+              </button>
+            )}
             
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
