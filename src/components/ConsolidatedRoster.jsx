@@ -1,13 +1,15 @@
 import { useEffect, useState, useMemo } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { motion } from 'framer-motion';
 import { Check, X, Minus, User, Loader2 } from 'lucide-react';
 import { parseLocalDate } from '../utils/dateHelpers';
 
-export default function ConsolidatedRoster({ year, dates, users }) {
+export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
   const [availabilityMap, setAvailabilityMap] = useState({}); // { [userId]: { [date]: { status, guests } } }
+  const [matchesMap, setMatchesMap] = useState({}); // { [date]: { captain1Id, captain2Id } }
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(null); // Key: `${date}_${userId}`
 
   // Stats for the header rows
   const statsByDate = useMemo(() => {
@@ -51,6 +53,24 @@ export default function ConsolidatedRoster({ year, dates, users }) {
            mapping[d.user_id][d.date] = { status: d.status, guests: d.guests || 0 };
         });
         setAvailabilityMap(mapping);
+
+        // Fetch Matches for Captain info
+        const matchesQ = query(
+            collection(db, 'matches'),
+            where('date', '>=', start),
+            where('date', '<=', end)
+        );
+        const matchSnap = await getDocs(matchesQ);
+        const matchMapping = {};
+        matchSnap.docs.forEach(doc => {
+            const d = doc.data();
+            matchMapping[d.date] = { 
+                captain1Id: d.captain1Id, 
+                captain2Id: d.captain2Id 
+            };
+        });
+        setMatchesMap(matchMapping);
+
       } catch (e) {
         console.error("Error fetching roster:", e);
       } finally {
@@ -60,6 +80,71 @@ export default function ConsolidatedRoster({ year, dates, users }) {
     
     if (year) fetchAll();
   }, [year]);
+
+  const handleToggleStatus = async (user, date, currentStatus) => {
+    if (!isAdmin || processing) return;
+    
+    const key = `${date}_${user.id}`;
+    setProcessing(key);
+
+    try {
+        let newStatus = null; // null means delete (pending)
+        if (!currentStatus) newStatus = 'in';
+        else if (currentStatus === 'in') newStatus = 'out';
+        else if (currentStatus === 'out') newStatus = null;
+
+        const docRef = doc(db, 'availability', `${date}_${user.id}`); // Using composite key for direct access if consistent
+        // Note: The main app uses addDoc with auto-ID in some places, but also query. 
+        // Ideally we should use a consistent ID format like `date_uid` to avoid duplicates.
+        // Let's first try to find the existing doc ID from our map logic or query it to be safe, 
+        // OR enforce `date_uid` ID usage. 
+        // Given the existing code in App.jsx wraps addDoc, we might have auto-ids.
+        // To support admin interaction safely, let's query the doc to update/delete it.
+        
+        const q = query(
+            collection(db, 'availability'),
+            where('user_id', '==', user.id),
+            where('date', '==', date)
+        );
+        const snapshot = await getDocs(q);
+        
+        if (newStatus) {
+            const data = {
+                user_id: user.id,
+                date: date,
+                status: newStatus,
+                guests: 0,
+                // created_at: Timestamp.now() // Optional update
+            };
+
+            if (!snapshot.empty) {
+                await setDoc(snapshot.docs[0].ref, data, { merge: true });
+            } else {
+                await setDoc(docRef, { ...data, created_at: Timestamp.now() }); // Fallback to deterministic ID if new
+            }
+        } else {
+            // Delete
+            if (!snapshot.empty) {
+               await deleteDoc(snapshot.docs[0].ref);
+            }
+        }
+
+        // Optimistic Update
+        setAvailabilityMap(prev => ({
+            ...prev,
+            [user.id]: {
+                ...prev[user.id],
+                [date]: newStatus ? { status: newStatus, guests: 0 } : undefined
+            }
+        }));
+
+    } catch (e) {
+        console.error("Error updating status:", e);
+        alert("Failed to update status");
+    } finally {
+        setProcessing(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -76,36 +161,37 @@ export default function ConsolidatedRoster({ year, dates, users }) {
         <div className="inline-block min-w-full align-middle">
           <table className="min-w-full divide-y divide-navy-800">
             <thead>
-              <tr className="bg-navy-950/50">
-                <th scope="col" className="sticky left-0 z-20 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-navy-100 bg-navy-950/95 backdrop-blur border-r border-navy-800 min-w-[200px]">
-                  Player
+              <tr className="bg-navy-950 shadow-sm z-30">
+                <th scope="col" className="sticky top-0 left-0 z-40 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-navy-100 bg-navy-950 border-r border-navy-800 min-w-[200px] h-20 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
+                  <div>Player</div>
+                  <div className="text-[10px] text-navy-100/40 font-normal uppercase tracking-wider mt-1">Status</div>
                 </th>
                 {dates.map(date => {
                   const d = parseLocalDate(date);
                   const isPast = new Date(date) < new Date().setHours(0,0,0,0);
                   return (
-                    <th key={date} scope="col" className={`px-2 py-3 text-center text-xs font-semibold min-w-[60px] ${isPast ? 'text-navy-100/30' : 'text-navy-100'}`}>
-                      <div className="flex flex-col items-center">
-                         <span className="uppercase text-[10px] tracking-wider mb-0.5 opacity-70">{d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
-                         <span className="text-lg leading-none">{d.getDate()}</span>
-                         <span className="text-[9px] opacity-50">{d.toLocaleDateString(undefined, { month: 'short' })}</span>
+                    <th key={date} scope="col" className={`sticky top-0 z-30 px-2 py-3 text-center text-xs font-semibold min-w-[60px] h-20 bg-navy-950 ${isPast ? 'text-navy-100/30' : 'text-navy-100'}`}>
+                      <div className="flex flex-col items-center justify-between h-full">
+                         <div className="flex flex-col items-center">
+                            <span className="uppercase text-[10px] tracking-wider mb-0.5 opacity-70">{d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
+                            <span className="text-lg leading-none">{d.getDate()}</span>
+                            <span className="text-[9px] opacity-50">{d.toLocaleDateString(undefined, { month: 'short' })}</span>
+                         </div>
+                         
+                         {/* Integrated Stats in Header */}
+                         <div className="flex items-center gap-1 mt-2 text-[10px] font-mono leading-none">
+                            <span className={`${statsByDate[date].in > 0 ? 'text-green-400 font-bold' : 'text-navy-100/20'}`}>
+                              {statsByDate[date].in}
+                            </span>
+                            <span className="text-navy-100/20">/</span>
+                            <span className={`${statsByDate[date].out > 0 ? 'text-red-400' : 'text-navy-100/20'}`}>
+                              {statsByDate[date].out}
+                            </span>
+                         </div>
                       </div>
                     </th>
                   );
                 })}
-              </tr>
-              {/* Stats Row */}
-              <tr className="bg-navy-800/30 font-mono text-xs border-b border-navy-800/50">
-                <td className="sticky left-0 z-20 py-2 pl-4 pr-3 text-left font-medium text-navy-100/70 bg-navy-900/95 border-r border-navy-800">
-                  Total Confirmed
-                </td>
-                {dates.map(date => (
-                  <td key={date} className="px-2 py-2 text-center">
-                    <span className={`px-1.5 py-0.5 rounded ${statsByDate[date].in > 0 ? 'bg-green-500/20 text-green-400 font-bold' : 'text-navy-100/20'}`}>
-                      {statsByDate[date].in}
-                    </span>
-                  </td>
-                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-navy-800/50 bg-navy-900/50">
@@ -123,14 +209,24 @@ export default function ConsolidatedRoster({ year, dates, users }) {
                     const entry = availabilityMap[user.id]?.[date];
                     const status = entry?.status;
                     const guests = entry?.guests || 0;
+                    const isProcessing = processing === `${date}_${user.id}`;
                     
+                    const matchInfo = matchesMap[date];
+                    const isC1 = matchInfo?.captain1Id === user.id;
+                    const isC2 = matchInfo?.captain2Id === user.id;
+
                     return (
-                      <td key={date} className="whitespace-nowrap px-2 py-3 text-center">
-                        <div className="flex flex-col items-center justify-center">
+                      <td 
+                        key={date} 
+                        onClick={() => handleToggleStatus(user, date, status)}
+                        className={`whitespace-nowrap px-2 py-3 text-center transition-colors ${isAdmin ? 'cursor-pointer hover:bg-navy-800/50' : ''} ${isC1 || isC2 ? 'bg-cricket-gold/5' : ''}`}
+                        title={isAdmin ? "Click to toggle availability" : ""}
+                      >
+                        <div className={`flex flex-col items-center justify-center ${isProcessing ? 'opacity-50 scale-90' : ''}`}>
                           {status === 'in' ? (
-                            <div className="flex items-center justify-center">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-500/20 text-green-400">
-                                  <Check size={14} strokeWidth={3} />
+                            <div className="flex items-center justify-center relative">
+                                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${isC1 || isC2 ? 'bg-cricket-gold text-navy-900 shadow-md ring-1 ring-cricket-gold' : 'bg-green-500/20 text-green-400'}`}>
+                                  {isC1 ? <span className="text-[10px] font-bold">C1</span> : isC2 ? <span className="text-[10px] font-bold">C2</span> : <Check size={14} strokeWidth={3} />}
                                 </span>
                                 {guests > 0 && <span className="ml-1 text-[10px] font-bold text-green-400">+{guests}</span>}
                             </div>

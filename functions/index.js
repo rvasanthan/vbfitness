@@ -121,3 +121,40 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('internal', error.message);
   }
 });
+
+// 6. Seed Users (Dev Helper)
+exports.seedUsers = functions.https.onRequest(async (req, res) => {
+  try {
+    const cricketNames = [
+      "Sachin Tendulkar", "Virat Kohli", "MS Dhoni", "Shane Warne", "Brian Lara",
+      "Ricky Ponting", "Jacques Kallis", "Rahul Dravid", "Kumar Sangakkara", "AB de Villiers",
+      "Muttiah Muralitharan", "Glenn McGrath", "Wasim Akram", "Kapil Dev", "Vivian Richards",
+      "Ian Botham", "Sunil Gavaskar", "Steve Waugh", "Adam Gilchrist", "Dale Steyn",
+      "James Anderson", "Rohit Sharma", "Kane Williamson", "Steve Smith", "Joe Root",
+      "Babar Azam", "Jasprit Bumrah", "Pat Cummins", "Ben Stokes", "Ravindra Jadeja",
+      "Ravichandran Ashwin", "David Warner", "Mitchell Starc", "Trent Boult", "Rashid Khan"
+    ];
+    const batch = db.batch();
+    
+    for (let i = 0; i < cricketNames.length; i++) {
+      const name = cricketNames[i];
+      const id = `dummy_cricketer_${i}`;
+      const userRef = db.collection('users').doc(id);
+      
+      batch.set(userRef, {
+        uid: id,
+        name: name,
+        email: `${name.replace(/\s+/g, '.').toLowerCase()}@rcc.com`,
+        role: 'user',
+        status: 'approved',
+        created_at: admin.firestore.Timestamp.now()
+      }, { merge: true });
+    }
+    
+    await batch.commit();
+    res.send(`Seeded ${cricketNames.length} users.`);
+  } catch (error) {
+    console.error("Seed Error:", error);
+    res.status(500).send("Error seeding users: " + error.message);
+  }
+});

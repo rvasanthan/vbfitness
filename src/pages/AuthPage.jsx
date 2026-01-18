@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
+import CricketVideoBackground from '../components/CricketVideoBackground';
 
 export default function AuthPage({ 
   onSignIn, 
@@ -10,10 +11,8 @@ export default function AuthPage({
   onSignOut 
 }) {
   return (
-    <div className="min-h-screen grid place-items-center p-4 relative overflow-hidden">
-      {/* Abstract Background Elements */}
-      <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-cricket-gold/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen grid place-items-center p-4 relative overflow-hidden bg-navy-900">
+      <CricketVideoBackground />
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -33,7 +32,7 @@ export default function AuthPage({
           </div>
           <div>
             <p className="text-cricket-gold font-bold tracking-widest text-xs uppercase mb-2">Rahway Cricket Club</p>
-            <h1 className="text-3xl font-bold text-navy-100 tracking-tight">Weekend Planner</h1>
+            <h1 className="text-3xl font-bold text-navy-100 tracking-tight">Inside Edge</h1>
           </div>
         </motion.div>
 

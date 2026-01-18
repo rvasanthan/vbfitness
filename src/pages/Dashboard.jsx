@@ -1,4 +1,6 @@
- import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LogOut, 
@@ -10,9 +12,15 @@ import {
   Users,
   LayoutGrid,
   Table,
-  Shield
+  Shield,
+  Swords,
+  Play,
+  Plus,
+  Wand2
 } from 'lucide-react';
 import ConsolidatedRoster from '../components/ConsolidatedRoster';
+import CreateMatchModal from '../components/CreateMatchModal';
+import MatchesList from '../components/MatchesList';
 import { formatDayLabel, groupByMonth, parseLocalDate } from '../utils/dateHelpers';
 
 export default function Dashboard({
@@ -34,6 +42,189 @@ export default function Dashboard({
 }) {
   const [guestCount, setGuestCount] = useState(0);
   const [viewMode, setViewMode] = useState('calendar');
+  const [match, setMatch] = useState(null);
+  const [isMatchModalOpen, setIsMatchModalOpen] = useState(false);
+  const [creatingMatch, setCreatingMatch] = useState(false);
+
+  useEffect(() => {
+     console.log("Dashboard Loaded. Current User:", user?.email, "Role:", user?.role, "IsAdmin Prop:", isAdmin);
+  }, [user, isAdmin]);
+
+  // Fetch Match for Selected Date
+  useEffect(() => {
+    async function fetchMatch() {
+        if (!selectedDate) {
+            setMatch(null);
+            return;
+        }
+        try {
+            const q = query(
+                collection(db, 'matches'), 
+                where('date', '==', selectedDate)
+            );
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                setMatch({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+            } else {
+                setMatch(null);
+            }
+        } catch (e) {
+            console.error("Error fetching match:", e);
+        }
+    }
+    fetchMatch();
+  }, [selectedDate]);
+
+  const handleCreateMatch = async (matchData) => {
+      setCreatingMatch(true);
+      try {
+          const docRef = await addDoc(collection(db, 'matches'), {
+              ...matchData,
+              status: 'scheduled',
+              created_by: user.uid,
+              created_at: Timestamp.now()
+          });
+          setMatch({ id: docRef.id, ...matchData, status: 'scheduled' });
+          setIsMatchModalOpen(false);
+      } catch (e) {
+          console.error("Error creating match:", e);
+          alert("Failed to create match");
+      } finally {
+          setCreatingMatch(false);
+      }
+  };
+
+  const handleStartMatch = async () => {
+      if (!match) return;
+      try {
+          const matchRef = doc(db, 'matches', match.id);
+          const newStatus = match.status === 'scheduled' ? 'active' : 'scheduled';
+          await updateDoc(matchRef, {
+              status: newStatus
+          });
+          setMatch({ ...match, status: newStatus });
+      } catch (e) {
+          console.error("Error updating match:", e);
+      }
+  };
+
+  const handleSetCaptain = async (playerId, role) => {
+    // role: '1' | '2' | null
+    try {
+        let matchId = match?.id;
+        let matchRef;
+
+        if (!matchId) {
+             matchRef = await addDoc(collection(db, 'matches'), {
+                date: selectedDate,
+                status: 'scheduled',
+                created_from_roster: true,
+                created_at: Timestamp.now()
+             });
+             matchId = matchRef.id;
+        } else {
+             matchRef = doc(db, 'matches', matchId);
+        }
+
+        const updateData = {};
+        if (role === '1') {
+            updateData.captain1Id = playerId;
+            if (match?.captain2Id === playerId) updateData.captain2Id = null; // swap protection
+        } else if (role === '2') {
+            updateData.captain2Id = playerId;
+            if (match?.captain1Id === playerId) updateData.captain1Id = null; // swap protection
+        } else {
+            // Unset
+            if (match?.captain1Id === playerId) updateData.captain1Id = null;
+            if (match?.captain2Id === playerId) updateData.captain2Id = null;
+        }
+
+        await updateDoc(matchRef, updateData);
+        setMatch(prev => ({ ...prev, id: matchId, ...updateData }));
+
+    } catch (e) {
+        console.error("Error setting captain:", e);
+        alert("Failed to set captain");
+    }
+  };
+
+  const handleAutoAssign = async () => {
+    if (!availability.in || availability.in.length < 2) {
+        alert("Not enough available players to assign captains.");
+        return;
+    }
+
+    // Confirmation
+    if (!window.confirm("Auto-assign captains based on round-robin availability? This will overwrite current captains.")) return;
+
+    setCreatingMatch(true);
+    try {
+        // 1. Fetch ALL matches to determine usage history
+        // Ideally we filter by current year/season but global history is better for fairness across seasons?
+        // Let's stick to current "active" matches in DB.
+        const matchesSnap = await getDocs(collection(db, 'matches'));
+        const usageCount = {};
+
+        matchesSnap.docs.forEach(d => {
+            const m = d.data();
+            if (m.captain1Id) usageCount[m.captain1Id] = (usageCount[m.captain1Id] || 0) + 1;
+            if (m.captain2Id) usageCount[m.captain2Id] = (usageCount[m.captain2Id] || 0) + 1;
+        });
+
+        // 2. Filter Candidates (Available players)
+        // We only consider those marked 'in'.
+        // Sort by usage count ASC, then random shuffle for ties.
+        const candidates = [...availability.in]
+             .filter(u => u.id && u.role !== 'guest') // Exclude explicit guests if any (though logic uses user profiles)
+             .map(u => ({ 
+                 ...u, 
+                 count: usageCount[u.id] || 0,
+                 random: Math.random() 
+             }))
+             .sort((a, b) => {
+                 if (a.count !== b.count) return a.count - b.count; // Prioritize least used
+                 return a.random - b.random; // Randomize ties
+             });
+
+        if (candidates.length < 2) {
+             alert("Not enough valid candidates (guests might be excluded).");
+             return;
+        }
+
+        const c1 = candidates[0].id;
+        const c2 = candidates[1].id;
+
+        // 3. Update Match
+        let matchId = match?.id;
+        let matchRef;
+
+        if (!matchId) {
+             const newMatchRef = await addDoc(collection(db, 'matches'), {
+                date: selectedDate,
+                status: 'scheduled',
+                created_from_roster: true,
+                created_at: Timestamp.now(),
+                captain1Id: c1,
+                captain2Id: c2
+             });
+             matchId = newMatchRef.id;
+             setMatch({ id: matchId, date: selectedDate, status: 'scheduled', captain1Id: c1, captain2Id: c2 });
+        } else {
+             matchRef = doc(db, 'matches', matchId);
+             await updateDoc(matchRef, {
+                 captain1Id: c1,
+                 captain2Id: c2
+             });
+             setMatch(prev => ({ ...prev, captain1Id: c1, captain2Id: c2 }));
+        }
+
+    } catch (e) {
+        console.error("Auto assign failed:", e);
+        alert("Failed to auto-assign: " + e.message);
+    } finally {
+        setCreatingMatch(false);
+    }
+  };
 
   // Reset guest count when date changes or availability loads
   const myStatusObj = useMemo(() => availability.in.find(u => u.id === user.uid), [availability, user.uid]);
@@ -84,6 +275,9 @@ export default function Dashboard({
              <button onClick={() => setViewMode('roster')} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'roster' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
                 <Table size={14} /> <span className="hidden sm:inline">Roster</span>
              </button>
+             <button onClick={() => setViewMode('matches')} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'matches' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
+                <Swords size={14} /> <span className="hidden sm:inline">Matches</span>
+             </button>
           </div>
           
           <div className="flex items-center gap-4">
@@ -117,7 +311,11 @@ export default function Dashboard({
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {viewMode === 'roster' ? (
            <div className="lg:col-span-12">
-             <ConsolidatedRoster year={year} dates={weekendDates} users={users} />
+             <ConsolidatedRoster year={year} dates={weekendDates} users={users} isAdmin={isAdmin} />
+           </div>
+        ) : viewMode === 'matches' ? (
+           <div className="lg:col-span-12">
+             <MatchesList isAdmin={isAdmin} />
            </div>
         ) : (
           <>
@@ -230,6 +428,107 @@ export default function Dashboard({
                   )}
                 </div>
 
+                {/* Match Details / Admin Actions */}
+                <div className="mb-6">
+                  {match ? (
+                    <div className="bg-navy-800/50 rounded-xl border border-navy-700/50 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-navy-100 flex items-center gap-2">
+                           <Swords size={16} className="text-cricket-gold" />
+                           {match?.opponent ? `vs ${match.opponent}` : 'Match Day'}
+                        </h3>
+                        {isAdmin && (
+                            <button 
+                                onClick={handleAutoAssign}
+                                className="p-1.5 rounded-lg bg-navy-900 text-cricket-gold border border-navy-700 hover:border-cricket-gold hover:bg-cricket-gold/10 transition-colors"
+                                title="Auto-Assign Captains (Round Robin)"
+                                disabled={creatingMatch}
+                            >
+                                {creatingMatch ? <div className="w-4 h-4 rounded-full border-2 border-cricket-gold border-t-transparent animate-spin" /> : <Wand2 size={14} />}
+                            </button>
+                        )}
+                        {match && (
+                           <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${match.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-navy-900 text-navy-100/50'}`}>
+                              {match.status}
+                           </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-navy-100/60 space-y-1">
+                         <p>📍 {match?.venue || 'Rahway River Park'}</p>
+                         <p>⏰ {match?.time || '13:00'} • {match?.format || '40 Overs'}</p>
+                      </div>
+
+
+                      {(match?.captain1Id || match?.captain2Id) && (
+                         <div className="flex gap-2 pt-2 border-t border-navy-700/50">
+                            {match.captain1Id && (
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-cricket-gold/10 rounded border border-cricket-gold/20">
+                                   <span className="w-4 h-4 rounded-full bg-cricket-gold text-navy-900 text-[9px] font-bold flex items-center justify-center">C1</span>
+                                   <span className="text-[10px] text-cricket-gold font-bold">
+                                       {users.find(u => u.id === match.captain1Id)?.name || 'C1'}
+                                   </span>
+                                </div>
+                            )}
+                            {match.captain2Id && (
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-cricket-gold/10 rounded border border-cricket-gold/20">
+                                   <span className="w-4 h-4 rounded-full bg-cricket-gold text-navy-900 text-[9px] font-bold flex items-center justify-center">C2</span>
+                                   <span className="text-[10px] text-cricket-gold font-bold">
+                                       {users.find(u => u.id === match.captain2Id)?.name || 'C2'}
+                                   </span>
+                                </div>
+                            )}
+                         </div>
+                      )}
+                      
+                      {isAdmin && match && (
+                          <button 
+                              onClick={handleStartMatch}
+                              className={`w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
+                                  match.status === 'active' 
+                                  ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20' 
+                                  : 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20'
+                              }`}
+                          >
+                              {match.status === 'active' ? 'End Match' : <> <Play size={12} fill="currentColor" /> Start Match </>}
+                          </button>
+                      )}
+                      
+                      {isAdmin && !match && (
+                          <button 
+                                onClick={() => setIsMatchModalOpen(true)}
+                                className="w-full py-2 bg-navy-800 text-navy-100 hover:bg-navy-700 rounded-lg text-xs font-bold border border-navy-700 transition-colors"                            
+                            >
+                                Configure Match
+                          </button>
+                      )}
+                    </div>
+                  ) : (
+                    isAdmin && (
+                        <div className="flex flex-col gap-2">
+                            <button
+                                onClick={() => setIsMatchModalOpen(true)}
+                                className="w-full py-3 border border-dashed border-navy-700 rounded-xl flex items-center justify-center gap-2 text-navy-100/50 hover:bg-navy-800/50 hover:text-cricket-gold hover:border-cricket-gold/30 transition-all group"
+                            >
+                                <div className="p-1 rounded-full bg-navy-800 group-hover:bg-cricket-gold/20 transition-colors">
+                                    <Plus size={16} />
+                                </div>
+                                <span className="text-xs font-bold uppercase tracking-wider">Create Match</span>
+                            </button>
+                            {availability.in.length > 2 && (
+                                <button 
+                                    onClick={handleAutoAssign}
+                                    className="w-full py-2 bg-navy-800 text-cricket-gold hover:bg-navy-700 rounded-lg text-xs font-bold border border-navy-700 transition-colors flex items-center justify-center gap-2"                            
+                                    title="Auto-Assign Captains for Round Robin"
+                                >
+                                    {creatingMatch ? <div className="w-4 h-4 rounded-full border-2 border-cricket-gold border-t-transparent animate-spin" /> : <Wand2 size={14} />}
+                                    {creatingMatch ? 'Assigning...' : 'Auto-Assign Captains'}
+                                </button>
+                            )}
+                        </div>
+                    )
+                  )}
+                </div>
+
                 {/* Status Actions */}
                 <div className="space-y-4 mb-8">
                   <div className="grid grid-cols-2 gap-3">
@@ -297,17 +596,36 @@ export default function Dashboard({
                     
                     <div className="flex flex-wrap gap-2">
                       {availability.in.length === 0 && <p className="text-navy-100/20 text-xs italic px-2">No players confirmed yet.</p>}
-                      {availability.in.map(u => (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-lg hover:bg-green-500/20 transition-colors cursor-default">
-                           <div className="w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-[10px] font-bold">
-                             {u.name.charAt(0)}
+                      {availability.in.map(u => {
+                        const isC1 = match?.captain1Id === u.id;
+                        const isC2 = match?.captain2Id === u.id;
+                        
+                        return (
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${isC1 || isC2 ? 'bg-cricket-gold/20 border-cricket-gold/50 shadow-sm' : 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20'}`}>
+                           <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isC1 || isC2 ? 'bg-cricket-gold text-navy-900' : 'bg-green-500/20 text-green-400'}`}>
+                             {isC1 ? 'C1' : isC2 ? 'C2' : u.name.charAt(0)}
                            </div>
-                           <span className="text-xs font-medium text-green-100">{u.name}</span>
+                           <span className={`text-xs font-medium ${isC1 || isC2 ? 'text-cricket-gold' : 'text-green-100'}`}>{u.name}</span>
                            {u.guests > 0 && (
                              <span className="ml-1 text-[10px] bg-green-500/20 text-green-400 px-1.5 rounded-full font-bold">+{u.guests}</span>
                            )}
+                           
+                           {isAdmin && (
+                               <div className="flex ml-auto gap-1.5 pl-2">
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); handleSetCaptain(u.id, isC1 ? null : '1'); }}
+                                     className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold border transition-colors ${isC1 ? 'bg-cricket-gold text-navy-900 border-cricket-gold shadow-sm' : 'bg-navy-800 text-navy-300 border-navy-600 hover:border-cricket-gold hover:text-cricket-gold'}`}
+                                     title={isC1 ? "Remove Captain 1" : "Set as Captain 1"}
+                                   >1</button>
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); handleSetCaptain(u.id, isC2 ? null : '2'); }}
+                                     className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold border transition-colors ${isC2 ? 'bg-cricket-gold text-navy-900 border-cricket-gold shadow-sm' : 'bg-navy-800 text-navy-300 border-navy-600 hover:border-cricket-gold hover:text-cricket-gold'}`}
+                                     title={isC2 ? "Remove Captain 2" : "Set as Captain 2"}
+                                   >2</button>
+                               </div>
+                           )}
                         </motion.div>
-                      ))}
+                      )})}
                     </div>
                   </div>
 
@@ -366,6 +684,14 @@ export default function Dashboard({
         </>
         )}
       </main>
+
+      <CreateMatchModal 
+        isOpen={isMatchModalOpen}
+        onClose={() => setIsMatchModalOpen(false)}
+        date={selectedDate}
+        onCreate={handleCreateMatch}
+        saving={creatingMatch}
+      />
     </div>
   );
 }
