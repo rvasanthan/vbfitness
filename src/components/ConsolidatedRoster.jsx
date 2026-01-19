@@ -11,6 +11,42 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null); // Key: `${date}_${userId}`
 
+  // Calculate Waitlist Status for each date
+  const waitlistMap = useMemo(() => {
+     const result = {}; // { [date]: Set<userId> }
+     
+     dates.forEach(date => {
+         const entries = [];
+         Object.keys(availabilityMap).forEach(uid => {
+             const entry = availabilityMap[uid][date];
+             if (entry && entry.status === 'in') {
+                 entries.push({ id: uid, ...entry });
+             }
+         });
+         
+         // Sort by timestamp
+         entries.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+         
+         // Apply strict 24 cap
+         const MAX = 24;
+         let headcount = 0;
+         const waitlistedCoords = new Set();
+         
+         entries.forEach(e => {
+             const size = 1 + (e.guests || 0);
+             if (headcount + size <= MAX) {
+                 headcount += size;
+             } else {
+                 waitlistedCoords.add(e.id);
+             }
+         });
+         
+         result[date] = waitlistedCoords;
+     });
+     
+     return result;
+  }, [availabilityMap, dates]);
+
   // Stats for the header rows
   const statsByDate = useMemo(() => {
     const stats = {};
@@ -49,8 +85,15 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
         
         snap.docs.forEach(doc => {
            const d = doc.data();
+           let ts = 0;
+           if (d.created_at && typeof d.created_at.toMillis === 'function') {
+                ts = d.created_at.toMillis();
+           } else if (d.created_at) { 
+                ts = new Date(d.created_at).getTime();
+           }
+
            if (!mapping[d.user_id]) mapping[d.user_id] = {};
-           mapping[d.user_id][d.date] = { status: d.status, guests: d.guests || 0 };
+           mapping[d.user_id][d.date] = { status: d.status, guests: d.guests || 0, joinedAt: ts };
         });
         setAvailabilityMap(mapping);
 
@@ -114,8 +157,12 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
                 date: date,
                 status: newStatus,
                 guests: 0,
-                // created_at: Timestamp.now() // Optional update
             };
+            
+            // If marking as IN, set timestamp to now so they go to end of list
+            if (newStatus === 'in') {
+                data.created_at = Timestamp.now();
+            }
 
             if (!snapshot.empty) {
                 await setDoc(snapshot.docs[0].ref, data, { merge: true });
@@ -134,7 +181,7 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
             ...prev,
             [user.id]: {
                 ...prev[user.id],
-                [date]: newStatus ? { status: newStatus, guests: 0 } : undefined
+                [date]: newStatus ? { status: newStatus, guests: 0, joinedAt: Date.now() } : undefined
             }
         }));
 
@@ -214,6 +261,7 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
                     const matchInfo = matchesMap[date];
                     const isC1 = matchInfo?.captain1Id === user.id;
                     const isC2 = matchInfo?.captain2Id === user.id;
+                    const isWaitlisted = waitlistMap[date]?.has(user.id);
 
                     return (
                       <td 
@@ -225,10 +273,14 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
                         <div className={`flex flex-col items-center justify-center ${isProcessing ? 'opacity-50 scale-90' : ''}`}>
                           {status === 'in' ? (
                             <div className="flex items-center justify-center relative">
-                                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${isC1 || isC2 ? 'bg-cricket-gold text-navy-900 shadow-md ring-1 ring-cricket-gold' : 'bg-green-500/20 text-green-400'}`}>
+                                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${
+                                    isC1 || isC2 ? 'bg-cricket-gold text-navy-900 shadow-md ring-1 ring-cricket-gold' 
+                                    : isWaitlisted ? 'bg-amber-500/20 text-amber-500' // Amber for Waitlist
+                                    : 'bg-green-500/20 text-green-400'
+                                }`}>
                                   {isC1 ? <span className="text-[10px] font-bold">C1</span> : isC2 ? <span className="text-[10px] font-bold">C2</span> : <Check size={14} strokeWidth={3} />}
                                 </span>
-                                {guests > 0 && <span className="ml-1 text-[10px] font-bold text-green-400">+{guests}</span>}
+                                {guests > 0 && <span className={`ml-1 text-[10px] font-bold ${isWaitlisted ? 'text-amber-500' : 'text-green-400'}`}>+{guests}</span>}
                             </div>
                           ) : status === 'out' ? (
                             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500/10 text-red-500/50">

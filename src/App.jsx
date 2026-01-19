@@ -12,7 +12,8 @@ import {
   doc,
   getDoc,
   setDoc,
-  serverTimestamp 
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   onAuthStateChanged, 
@@ -196,11 +197,33 @@ export default function App() {
       const outList = [];
       for (const docSnap of snapshot.docs) {
         const data = docSnap.data();
-        const userInfo = usersById[data.user_id] || { id: data.user_id, name: 'Unknown', email: '' }; // Fallback
-        const entry = { ...userInfo, guests: data.guests || 0 };
+        // Skip users not found in valid user list (cleaned up/zombie records)
+        // If users list is not loaded yet, this might temp hide everyone, but useEffect will re-run when users load.
+        if (!usersById[data.user_id]) continue; 
+
+        const userInfo = usersById[data.user_id];
+        
+        // Get timestamp for ordering (FIFO)
+        let ts = 0;
+        if (data.created_at && typeof data.created_at.toMillis === 'function') {
+            ts = data.created_at.toMillis();
+        } else if (data.created_at) { 
+            ts = new Date(data.created_at).getTime();
+        }
+        
+        const entry = { 
+            ...userInfo, 
+            guests: data.guests || 0, 
+            guestNames: data.guestNames || [],
+            joinedAt: ts 
+        };
         if (data.status === 'in') inList.push(entry);
         else outList.push(entry);
       }
+      
+      // Sort by joinedAt (First In, First Served)
+      inList.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+
       setAvailability({ in: inList, out: outList });
     } catch (err) {
       console.error(err);
@@ -247,10 +270,24 @@ export default function App() {
     setAvailability({ in: [], out: [] });
   }
 
-  async function setMyStatus(status, guests = 0) {
+  async function setMyStatus(status, guestsOrDetails = 0) {
     if (!currentUser || !selectedDate) return;
     setLoading(true);
     setStatusMessage('');
+    
+    // Parse input: guestsOrDetails can be Number or Array of names
+    let guestCount = 0;
+    let guestNames = [];
+    
+    if (Array.isArray(guestsOrDetails)) {
+        guestNames = guestsOrDetails;
+        guestCount = guestsOrDetails.length;
+    } else {
+        guestCount = Number(guestsOrDetails) || 0;
+        // If count provided but no names (legacy/admin toggle?), fill defaults? 
+        // Or just leave empty. Current UI for Admin Roster Toggle passes nothing for guests.
+    }
+
     try {
       const q = query(
         collection(db, 'availability'),
@@ -262,12 +299,18 @@ export default function App() {
       
       const data = {
         status,
-        guests: status === 'in' ? guests : 0
+        guests: status === 'in' ? guestCount : 0,
+        guestNames: status === 'in' ? guestNames : []
       };
 
       if (!existing.empty) {
-        // user could click actual button 'in' when already 'in', we just update it
-        // Or toggle? Requirement says "I'm in" / "Can't make it" buttons.
+        // If moving from OUT to IN, update timestamp to push to end of line
+        // If already IN and just updating guests, keep original timestamp (keep spot)
+        const currentData = existing.docs[0].data();
+        if (status === 'in' && currentData.status !== 'in') {
+            data.created_at = Timestamp.now();
+        }
+        
         await updateDoc(existing.docs[0].ref, data);
       } else {
         await addDoc(collection(db, 'availability'), {
@@ -285,6 +328,32 @@ export default function App() {
       setStatusMessage(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResetPool() {
+    if (!currentUser || currentUser.role !== 'admin' || !selectedDate) return;
+    if (!window.confirm("Are you sure you want to RESET the entire availability pool for this date? This cannot be undone.")) return;
+    
+    setLoading(true);
+    try {
+        const q = query(collection(db, 'availability'), where('date', '==', selectedDate));
+        const snapshot = await getDocs(q);
+        
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        
+        await batch.commit();
+        await loadAvailability(selectedDate);
+        setStatusMessage('Pool reset successfully');
+        setTimeout(() => setStatusMessage(''), 3000);
+    } catch (e) {
+        console.error("Error resetting pool:", e);
+        setStatusMessage('Error resetting pool');
+    } finally {
+        setLoading(false);
     }
   }
 
@@ -364,11 +433,13 @@ export default function App() {
         setSelectedDate={setSelectedDate}
         availability={availability}
         onSetStatus={setMyStatus}
+        onResetPool={handleResetPool}
         onSignOut={handleSignOut}
         loading={loading}
         statusMessage={statusMessage}
         isAdmin={currentUser.role === 'admin'}
         onOpenAdmin={() => setShowAdmin(true)}
+        onRefresh={() => selectedDate && loadAvailability(selectedDate)}
       />
       {showAdmin && (
          <AdminPanel 

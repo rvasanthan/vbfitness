@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,10 +16,17 @@ import {
   Swords,
   Play,
   Plus,
-  Wand2
+  Minus,
+  Wand2,
+  Trash2,
+  Clock,
+  Share2
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import MatchShareCard from '../components/MatchShareCard';
 import ConsolidatedRoster from '../components/ConsolidatedRoster';
 import CreateMatchModal from '../components/CreateMatchModal';
+import GuestNameModal from '../components/GuestNameModal';
 import MatchesList from '../components/MatchesList';
 import { formatDayLabel, groupByMonth, parseLocalDate } from '../utils/dateHelpers';
 
@@ -34,17 +41,39 @@ export default function Dashboard({
   setSelectedDate,
   availability,
   onSetStatus,
+  onResetPool,
   onSignOut,
   loading,
   statusMessage,
   isAdmin,
-  onOpenAdmin
+  onOpenAdmin,
+  onRefresh
 }) {
   const [guestCount, setGuestCount] = useState(0);
   const [viewMode, setViewMode] = useState('calendar');
   const [match, setMatch] = useState(null);
   const [isMatchModalOpen, setIsMatchModalOpen] = useState(false);
   const [creatingMatch, setCreatingMatch] = useState(false);
+  const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+  const [pendingGuestCount, setPendingGuestCount] = useState(0);
+  const shareCardRef = useRef(null);
+  const [isSharing, setIsSharing] = useState(false);
+  
+  const handleGuestClick = (count) => {
+    if (count === 0) {
+        setGuestCount(0);
+        onSetStatus('in', 0); // Clear guests
+    } else {
+        setPendingGuestCount(count);
+        setIsGuestModalOpen(true);
+    }
+  };
+
+  const handleGuestSubmit = (names) => {
+    setIsGuestModalOpen(false);
+    setGuestCount(names.length);
+    onSetStatus('in', names);
+  };
 
   useEffect(() => {
      console.log("Dashboard Loaded. Current User:", user?.email, "Role:", user?.role, "IsAdmin Prop:", isAdmin);
@@ -78,13 +107,22 @@ export default function Dashboard({
   const handleCreateMatch = async (matchData) => {
       setCreatingMatch(true);
       try {
-          const docRef = await addDoc(collection(db, 'matches'), {
-              ...matchData,
-              status: 'scheduled',
-              created_by: user.uid,
-              created_at: Timestamp.now()
-          });
-          setMatch({ id: docRef.id, ...matchData, status: 'scheduled' });
+          if (match && match.id) {
+              const matchRef = doc(db, 'matches', match.id);
+              await updateDoc(matchRef, {
+                  ...matchData,
+                  status: 'scheduled'
+              });
+              setMatch(prev => ({ ...prev, ...matchData, status: 'scheduled' }));
+          } else {
+              const docRef = await addDoc(collection(db, 'matches'), {
+                  ...matchData,
+                  status: 'scheduled',
+                  created_by: user.uid,
+                  created_at: Timestamp.now()
+              });
+              setMatch({ id: docRef.id, ...matchData, status: 'scheduled' });
+          }
           setIsMatchModalOpen(false);
       } catch (e) {
           console.error("Error creating match:", e);
@@ -114,12 +152,24 @@ export default function Dashboard({
         let matchId = match?.id;
         let matchRef;
 
+        const currentTeam1 = match?.team1 || [];
+        const currentTeam2 = match?.team2 || [];
+
+        // 1. Remove from any existing teams (clean slate)
+        let newTeam1 = currentTeam1.filter(id => id !== playerId);
+        let newTeam2 = currentTeam2.filter(id => id !== playerId);
+
         if (!matchId) {
              matchRef = await addDoc(collection(db, 'matches'), {
                 date: selectedDate,
                 status: 'scheduled',
+                venue: 'Rahway River Park',
+                time: '13:00',
+                format: '40 Overs',
                 created_from_roster: true,
-                created_at: Timestamp.now()
+                created_at: Timestamp.now(),
+                team1: [],
+                team2: []
              });
              matchId = matchRef.id;
         } else {
@@ -128,19 +178,45 @@ export default function Dashboard({
 
         const updateData = {};
         if (role === '1') {
+            // Preserve outgoing captain in roster
+            if (match?.captain1Id && match.captain1Id !== playerId) {
+                if (!newTeam1.includes(match.captain1Id)) newTeam1.push(match.captain1Id);
+            }
+
             updateData.captain1Id = playerId;
             if (match?.captain2Id === playerId) updateData.captain2Id = null; // swap protection
+            newTeam1.push(playerId); // Add to Team 1
         } else if (role === '2') {
+             // Preserve outgoing captain in roster
+            if (match?.captain2Id && match.captain2Id !== playerId) {
+                if (!newTeam2.includes(match.captain2Id)) newTeam2.push(match.captain2Id);
+            }
+
             updateData.captain2Id = playerId;
             if (match?.captain1Id === playerId) updateData.captain1Id = null; // swap protection
+            newTeam2.push(playerId); // Add to Team 2
         } else {
             // Unset
             if (match?.captain1Id === playerId) updateData.captain1Id = null;
             if (match?.captain2Id === playerId) updateData.captain2Id = null;
         }
 
+        // Attach teams to update
+        updateData.team1 = newTeam1;
+        updateData.team2 = newTeam2;
+
         await updateDoc(matchRef, updateData);
-        setMatch(prev => ({ ...prev, id: matchId, ...updateData }));
+        
+        setMatch(prev => {
+            const base = prev || { 
+                id: matchId, 
+                date: selectedDate, 
+                status: 'scheduled',
+                team1: [],
+                team2: [] 
+            };
+            return { ...base, ...updateData };
+        });
 
     } catch (e) {
         console.error("Error setting captain:", e);
@@ -202,20 +278,38 @@ export default function Dashboard({
              const newMatchRef = await addDoc(collection(db, 'matches'), {
                 date: selectedDate,
                 status: 'scheduled',
+                venue: 'Rahway River Park',
+                time: '13:00',
+                format: '40 Overs',
                 created_from_roster: true,
                 created_at: Timestamp.now(),
                 captain1Id: c1,
-                captain2Id: c2
+                captain2Id: c2,
+                team1: [c1],
+                team2: [c2]
              });
              matchId = newMatchRef.id;
-             setMatch({ id: matchId, date: selectedDate, status: 'scheduled', captain1Id: c1, captain2Id: c2 });
+             setMatch({ 
+                 id: matchId, 
+                 date: selectedDate, 
+                 status: 'scheduled', 
+                 venue: 'Rahway River Park',
+                 time: '13:00',
+                 format: '40 Overs',
+                 captain1Id: c1, 
+                 captain2Id: c2, 
+                 team1: [c1], 
+                 team2: [c2] 
+            });
         } else {
              matchRef = doc(db, 'matches', matchId);
              await updateDoc(matchRef, {
                  captain1Id: c1,
-                 captain2Id: c2
+                 captain2Id: c2,
+                 team1: [c1],
+                 team2: [c2]
              });
-             setMatch(prev => ({ ...prev, captain1Id: c1, captain2Id: c2 }));
+             setMatch(prev => ({ ...prev, captain1Id: c1, captain2Id: c2, team1: [c1], team2: [c2] }));
         }
 
     } catch (e) {
@@ -225,6 +319,213 @@ export default function Dashboard({
         setCreatingMatch(false);
     }
   };
+
+  const handlePickPlayer = async (playerId, teamIdsArrayName) => {
+    // teamIdsArrayName: 'team1' | 'team2'
+    if (!match?.id) return;
+    
+    try {
+        const matchRef = doc(db, 'matches', match.id);
+        const currentData = match; // utilize local state for optimistic checking
+        const currentTeam = currentData[teamIdsArrayName] || [];
+        
+        // Prevent duplicates
+        if (currentTeam.includes(playerId)) return;
+        
+        // Remove from other team if switched
+        const otherTeamName = teamIdsArrayName === 'team1' ? 'team2' : 'team1';
+        let otherTeam = currentData[otherTeamName] || [];
+        if (otherTeam.includes(playerId)) {
+            otherTeam = otherTeam.filter(id => id !== playerId);
+        }
+
+        const newTeam = [...currentTeam, playerId];
+        
+        await updateDoc(matchRef, {
+            [teamIdsArrayName]: newTeam,
+            [otherTeamName]: otherTeam
+        });
+        
+        setMatch(prev => ({
+            ...prev,
+            [teamIdsArrayName]: newTeam,
+            [otherTeamName]: otherTeam
+        }));
+    } catch (e) {
+        console.error("Error picking player:", e);
+        alert("Failed to pick player");
+    }
+  };
+
+  const handleRemovePlayer = async (playerId, teamIdsArrayName) => {
+      if (!match?.id) return;
+      try {
+        const matchRef = doc(db, 'matches', match.id);
+        const currentTeam = match[teamIdsArrayName] || [];
+        const newTeam = currentTeam.filter(id => id !== playerId);
+        
+        await updateDoc(matchRef, {
+            [teamIdsArrayName]: newTeam
+        });
+        
+        setMatch(prev => ({
+            ...prev,
+            [teamIdsArrayName]: newTeam
+        }));
+      } catch (e) {
+          console.error("Error removing player:", e);
+      }
+  }
+
+  const handleShare = async () => {
+    if (!shareCardRef.current || !match) return;
+    setIsSharing(true);
+    
+    try {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const canvas = await html2canvas(shareCardRef.current, {
+            backgroundColor: '#0f172a',
+            scale: 2,
+            useCORS: true,
+            logging: false
+        });
+        
+        canvas.toBlob(async (blob) => {
+            if (!blob) return;
+            
+            const fileName = `RCC-Match-${selectedDate}.png`;
+            const file = new File([blob], fileName, { type: 'image/png' });
+            
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: 'RCC Match Roster',
+                        text: `Match roster for ${selectedDate}` 
+                    });
+                } catch (err) {
+                    if (err.name !== 'AbortError') console.error("Share failed", err);
+                }
+            } else {
+                const link = document.createElement('a');
+                link.download = fileName;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }
+            setIsSharing(false);
+        }, 'image/png');
+        
+    } catch (e) {
+        console.error("Error generating share image:", e);
+        alert("Failed to generate share image");
+        setIsSharing(false);
+    }
+  };
+
+  // --- Derived State for Teams ---
+
+  // Availability Split: First 24 PLAYERS (Members Only) are Pool, Rest are Waitlist
+  // Guests are ALWAYS in Guest Pool (visually separate) but considered "Playable/Selectable"
+  
+  const allInPlayers = availability?.in || [];
+  const MAX_MEMBERS = 24;
+  
+  let memberHeadcount = 0;
+  
+  const poolMembers = [];
+  const waitListMembers = [];
+  const allGuests = []; // All guests go here
+  const allGuestObjects = {};
+
+  for (const player of allInPlayers) {
+     // 1. Member Processing (Strict FIFO)
+     const isMemberWaitlisted = memberHeadcount >= MAX_MEMBERS;
+     
+     if (!isMemberWaitlisted) {
+         poolMembers.push(player);
+         memberHeadcount++;
+     } else {
+         waitListMembers.push(player);
+     }
+
+     // 2. Guest Processing - Always add to guest pool
+     const pGuestCount = player.guests || 0;
+     const pGuestNames = player.guestNames || [];
+
+     for (let i = 0; i < pGuestCount; i++) {
+         const gName = pGuestNames[i] || `Guest ${i+1}`;
+         const gId = `guest_${player.id}_${i}`;
+         const gObj = {
+             id: gId,
+             name: gName, 
+             displayName: `${gName} (Guest of ${player.name.split(' ')[0]})`, 
+             role: 'guest',
+             hostId: player.id,
+             isGuest: true,
+             guests: 0
+         };
+         allGuestObjects[gId] = gObj;
+         allGuests.push(gObj);
+     }
+  }
+
+  // Playable Pool used for Common Player Logic & Selection Context
+  // Includes Top 24 Members AND All Guests
+  const playablePool = [...poolMembers, ...allGuests];
+
+  // Common Player Logic: If Odd number of playable players, last one is common
+  const commonPlayerId = useMemo(() => {
+     if (playablePool.length > 0 && playablePool.length % 2 !== 0) {
+        return playablePool[playablePool.length - 1].id;
+     }
+     return null;
+  }, [playablePool]);
+
+  // Ensure Captains are always in their respective teams and not in the other
+  const team1Ids = useMemo(() => {
+      const ids = new Set(match?.team1 || []);
+      if (match?.captain1Id) ids.add(match.captain1Id);
+      if (match?.captain2Id) ids.delete(match.captain2Id);
+      if (commonPlayerId) ids.add(commonPlayerId); // Auto-add common player
+      return Array.from(ids);
+  }, [match?.team1, match?.captain1Id, match?.captain2Id, commonPlayerId]);
+
+  const team2Ids = useMemo(() => {
+      const ids = new Set(match?.team2 || []);
+      if (match?.captain2Id) ids.add(match.captain2Id);
+      if (match?.captain1Id) ids.delete(match.captain1Id);
+      if (commonPlayerId) ids.add(commonPlayerId); // Auto-add common player
+      return Array.from(ids);
+  }, [match?.team2, match?.captain1Id, match?.captain2Id, commonPlayerId]);
+
+  // Players in Roster (Pool) but NOT in a team yet
+  // Common player is technically "picked" for both, so they shouldn't show in pool
+  const unpickedMembers = poolMembers.filter(u => !team1Ids.includes(u.id) && !team2Ids.includes(u.id) && u.id !== commonPlayerId);
+  const unpickedGuests = allGuests.filter(u => !team1Ids.includes(u.id) && !team2Ids.includes(u.id) && u.id !== commonPlayerId);
+
+  // Waitlist Players (excluding those who managed to get picked e.g. as Captains - keeping logic robust)
+  const waitListPlayers = waitListMembers.filter(u => !team1Ids.includes(u.id) && !team2Ids.includes(u.id));
+
+  // Hydrated Team Lists (IDs -> User Objects)
+  const getPlayerDetails = (id) => {
+      // Look in all sources including Guest Objects and raw In list and raw Members list
+      const foundInMembers = poolMembers.find(u => u.id === id) || waitListMembers.find(u => u.id === id);
+      const foundInStore = (availability?.in || []).find(u => u.id === id);
+      return foundInMembers || foundInStore || allGuestObjects[id] || { id, name: 'Guest/Unknown', role: 'guest' };
+  };
+
+  const team1Players = team1Ids.map(getPlayerDetails);
+  const team2Players = team2Ids.map(getPlayerDetails);
+
+  // Identity Checks
+  const isCaptain1 = user?.uid === match?.captain1Id;
+  const isCaptain2 = user?.uid === match?.captain2Id;
+  const canPickTeam1 = isAdmin || isCaptain1;
+  const canPickTeam2 = isAdmin || isCaptain2;
+  
+  // Is the current user marked as 'in' for this date?
+  const isUserIn = (availability?.in || []).some(u => u.id === user?.uid);
 
   // Reset guest count when date changes or availability loads
   const myStatusObj = useMemo(() => availability.in.find(u => u.id === user.uid), [availability, user.uid]);
@@ -263,19 +564,19 @@ export default function Dashboard({
           <div className="flex items-center gap-3">
              <img src="/rcc-logo.svg" alt="Logo" className="w-10 h-10 drop-shadow-lg" />
              <div className="hidden md:block">
-               <h1 className="text-navy-100 font-bold text-lg leading-tight tracking-tight">RCC Planner</h1>
+               <h1 className="text-navy-100 font-bold text-lg leading-tight tracking-tight">RCC Inside Edge</h1>
                <p className="text-navy-100/50 text-[10px] uppercase tracking-widest font-semibold">Season {year}</p>
              </div>
           </div>
 
           <div className="flex bg-navy-900 p-1 rounded-lg border border-navy-800 mx-2">
-             <button onClick={() => setViewMode('calendar')} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'calendar' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
+             <button onClick={() => { setViewMode('calendar'); onRefresh && onRefresh(); }} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'calendar' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
                 <LayoutGrid size={14} /> <span className="hidden sm:inline">Calendar</span>
              </button>
              <button onClick={() => setViewMode('roster')} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'roster' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
                 <Table size={14} /> <span className="hidden sm:inline">Roster</span>
              </button>
-             <button onClick={() => setViewMode('matches')} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'matches' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
+             <button onClick={() => { setViewMode('matches'); onRefresh && onRefresh(); }} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'matches' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
                 <Swords size={14} /> <span className="hidden sm:inline">Matches</span>
              </button>
           </div>
@@ -315,12 +616,12 @@ export default function Dashboard({
            </div>
         ) : viewMode === 'matches' ? (
            <div className="lg:col-span-12">
-             <MatchesList isAdmin={isAdmin} />
+             <MatchesList isAdmin={isAdmin} user={user} users={users} />
            </div>
         ) : (
           <>
         {/* Calendar Grid (Left Column) */}
-        <section className="lg:col-span-8 space-y-8">
+        <section className="lg:col-span-12 space-y-8 order-2">
            <div className="flex items-center justify-between">
              <div>
                <h2 className="text-2xl font-bold text-navy-100 tracking-tight">Season Calendar</h2>
@@ -388,10 +689,10 @@ export default function Dashboard({
                              {dateStr.split('-')[2]}
                            </span>
                            {holidayName && (
-                             <div className="absolute -top-1.5 -right-1.5">
-                               <span className="relative flex h-3 w-3">
+                             <div className="absolute top-1.5 right-1.5">
+                               <span className="relative flex h-2 w-2">
                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                 <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                                </span>
                              </div>
                            )}
@@ -406,7 +707,7 @@ export default function Dashboard({
         </section>
 
         {/* Details Sidebar (Right Column) */}
-        <aside className="lg:col-span-4 space-y-6">
+        <aside className="lg:col-span-12 space-y-6 order-1">
           <AnimatePresence mode="wait">
             {selectedDate ? (
               <motion.div
@@ -415,7 +716,7 @@ export default function Dashboard({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="bg-navy-900 border border-navy-800 rounded-[2rem] p-6 shadow-xl sticky top-24"
+                className="bg-navy-900 border border-navy-800 rounded-[2rem] p-6 shadow-xl"
               >
                 <div className="mb-8 p-4 bg-navy-950/50 rounded-2xl border border-navy-800/50">
                   <p className="text-navy-100/50 text-[10px] uppercase font-bold tracking-widest mb-2">Selected Date</p>
@@ -481,16 +782,26 @@ export default function Dashboard({
                       )}
                       
                       {isAdmin && match && (
-                          <button 
-                              onClick={handleStartMatch}
-                              className={`w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
-                                  match.status === 'active' 
-                                  ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20' 
-                                  : 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20'
-                              }`}
-                          >
-                              {match.status === 'active' ? 'End Match' : <> <Play size={12} fill="currentColor" /> Start Match </>}
-                          </button>
+                          <div className="grid grid-cols-2 gap-2">
+                             <button
+                                 onClick={handleShare}
+                                 disabled={isSharing}
+                                 className="w-full py-2 bg-navy-800 text-cricket-gold hover:bg-navy-700 rounded-lg text-xs font-bold border border-navy-700 transition-colors flex items-center justify-center gap-2"
+                             >
+                                 {isSharing ? <div className="w-3 h-3 rounded-full border-2 border-cricket-gold border-t-transparent animate-spin"/> : <Share2 size={12} />}
+                                 Publish
+                             </button>
+                             <button 
+                                  onClick={handleStartMatch}
+                                  className={`w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
+                                      match.status === 'active' 
+                                      ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20' 
+                                      : 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20'
+                                  }`}
+                              >
+                                  {match.status === 'active' ? 'End Match' : <> <Play size={12} fill="currentColor" /> Start Match </>}
+                              </button>
+                          </div>
                       )}
                       
                       {isAdmin && !match && (
@@ -524,6 +835,17 @@ export default function Dashboard({
                                     {creatingMatch ? 'Assigning...' : 'Auto-Assign Captains'}
                                 </button>
                             )}
+                            
+                            {(availability.in.length > 0 || availability.out.length > 0) && (
+                                <button 
+                                    onClick={onResetPool}
+                                    className="w-full py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-bold border border-red-500/20 transition-colors flex items-center justify-center gap-2 mt-2"
+                                    title="Clear all availability responses for this date"
+                                >
+                                    <Trash2 size={14} />
+                                    Reset Pool
+                                </button>
+                            )}
                         </div>
                     )
                   )}
@@ -532,6 +854,7 @@ export default function Dashboard({
                 {/* Status Actions */}
                 <div className="space-y-4 mb-8">
                   <div className="grid grid-cols-2 gap-3">
+                    {!isUserIn && (
                     <button
                       disabled={loading}
                       onClick={() => onSetStatus('in', guestCount)}
@@ -541,10 +864,11 @@ export default function Dashboard({
                       <span className="text-sm font-bold text-navy-100 group-hover:text-green-700">I'm In</span>
                       <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
+                    )}
                     <button
                       disabled={loading}
                       onClick={() => onSetStatus('out')}
-                      className="relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-navy-800 hover:bg-red-100 border border-navy-700 hover:border-red-500 transition-all group active:scale-95"
+                      className={`relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-navy-800 hover:bg-red-100 border border-navy-700 hover:border-red-500 transition-all group active:scale-95 ${isUserIn ? 'col-span-2' : ''}`}
                     >
                       <XCircle className="w-8 h-8 text-navy-200 group-hover:text-red-500 transition-colors" />
                       <span className="text-sm font-bold text-navy-100 group-hover:text-red-700">Can't Make It</span>
@@ -562,7 +886,7 @@ export default function Dashboard({
                       {[0, 1, 2, 3, 4, 5].map(num => (
                         <button
                           key={num}
-                          onClick={() => setGuestCount(num)}
+                          onClick={() => handleGuestClick(num)}
                           className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all ${
                             guestCount === num 
                               ? 'bg-navy-100 text-navy-900 shadow-lg' 
@@ -584,44 +908,169 @@ export default function Dashboard({
 
                 {/* Rosters */}
                 <div className="space-y-6">
-                  {/* IN */}
+                  
+                  {/* Team Selection UI (Only if match exists and at least one captain assigned) */}
+                  {(match?.captain1Id || match?.captain2Id) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Team 1: Spartans */}
+                          <div className={`space-y-3 p-4 rounded-xl border ${isCaptain1 ? 'bg-red-900/10 border-red-500/30' : 'bg-navy-900/50 border-navy-800'}`}>
+                             <div className="flex items-center justify-between">
+                                <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
+                                  <Swords size={14} />
+                                  RCC Spartans
+                                </h4>
+                                <span className="text-[10px] font-mono font-bold bg-navy-950 px-2 py-0.5 rounded text-red-200">{team1Players.length}</span>
+                             </div>
+                             <div className="flex flex-wrap gap-2 min-h-[50px]">
+                                {team1Players.length === 0 && <p className="text-navy-100/20 text-xs italic w-full text-center py-2">No players picked.</p>}
+                                {team1Players.map(u => {
+                                    const isCommon = u.id === commonPlayerId;
+                                    return (
+                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isCommon ? 'bg-purple-500/10 border-purple-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                                       <div 
+                                            onClick={(e) => {
+                                                if (!isAdmin) return;
+                                                e.stopPropagation();
+                                                if (match.captain1Id === u.id) {
+                                                    handleSetCaptain(u.id, '2'); 
+                                                } else {
+                                                    handleSetCaptain(u.id, '1');
+                                                }
+                                            }}
+                                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'} ${isAdmin ? 'cursor-pointer hover:scale-110 hover:bg-red-500 hover:text-white' : ''}`}
+                                            title={isAdmin ? (match.captain1Id === u.id ? "Switch to Blue Captain" : "Promote to Red Captain") : ""}
+                                       >
+                                         {match.captain1Id === u.id ? 'C1' : u.name.charAt(0)}
+                                       </div>
+                                       <span className={`text-xs font-bold ${isCommon ? 'text-purple-400' : 'text-red-400'}`}>
+                                           {u.displayName || u.name}
+                                           {isCommon && <span className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 px-1 rounded uppercase">Common</span>}
+                                       </span>
+                                       {u.guests > 0 && <span className={`ml-1 text-[10px] px-1.5 rounded-full font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'}`}>+{u.guests}</span>}
+                                       
+                                       {canPickTeam1 && u.id !== match.captain1Id && !isCommon && (
+                                           <button 
+                                             onClick={() => handleRemovePlayer(u.id, 'team1')}
+                                             className="ml-auto w-5 h-5 rounded flex items-center justify-center text-navy-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                           >
+                                             <Minus size={12} />
+                                           </button>
+                                       )}
+                                    </motion.div>
+                                )})}
+                             </div>
+                          </div>
+
+                          {/* Team 2: Warriors */}
+                          <div className={`space-y-3 p-4 rounded-xl border ${isCaptain2 ? 'bg-blue-900/10 border-blue-500/30' : 'bg-navy-900/50 border-navy-800'}`}>
+                             <div className="flex items-center justify-between">
+                                <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                                  <Shield size={14} />
+                                  RCC Warriors
+                                </h4>
+                                <span className="text-[10px] font-mono font-bold bg-navy-950 px-2 py-0.5 rounded text-blue-200">{team2Players.length}</span>
+                             </div>
+                             <div className="flex flex-wrap gap-2 min-h-[50px]">
+                                {team2Players.length === 0 && <p className="text-navy-100/20 text-xs italic w-full text-center py-2">No players picked.</p>}
+                                {team2Players.map(u => {
+                                    const isCommon = u.id === commonPlayerId;
+                                    return (
+                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isCommon ? 'bg-purple-500/10 border-purple-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
+                                       <div 
+                                            onClick={(e) => {
+                                                if (!isAdmin) return;
+                                                e.stopPropagation();
+                                                if (match.captain2Id === u.id) {
+                                                    handleSetCaptain(u.id, null); 
+                                                } else {
+                                                    handleSetCaptain(u.id, '2');
+                                                }
+                                            }}
+                                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'} ${isAdmin ? 'cursor-pointer hover:scale-110 hover:bg-blue-500 hover:text-white' : ''}`}
+                                            title={isAdmin ? (match.captain2Id === u.id ? "Unassign Captain" : "Promote to Blue Captain") : ""}
+                                       >
+                                         {match.captain2Id === u.id ? 'C2' : u.name.charAt(0)}
+                                       </div>
+                                       <span className={`text-xs font-bold ${isCommon ? 'text-purple-400' : 'text-blue-400'}`}>
+                                           {u.displayName || u.name}
+                                           {isCommon && <span className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 px-1 rounded uppercase">Common</span>}
+                                       </span>
+                                       {u.guests > 0 && <span className={`ml-1 text-[10px] px-1.5 rounded-full font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>+{u.guests}</span>}
+                                       
+                                       {canPickTeam2 && u.id !== match.captain2Id && !isCommon && (
+                                           <button 
+                                             onClick={() => handleRemovePlayer(u.id, 'team2')}
+                                             className="ml-auto w-5 h-5 rounded flex items-center justify-center text-navy-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                                           >
+                                             <Minus size={12} />
+                                           </button>
+                                       )}
+                                    </motion.div>
+                                )})}
+                             </div>
+                          </div>
+                      </div>
+                  )}
+
+                  {/* Available / Pool (Members) */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                        Available
+                        Available Pool
                       </h4>
-                      <span className="text-[10px] font-mono font-bold bg-navy-800 px-2 py-0.5 rounded text-navy-100/50">{availability.in.length}</span>
+                      <span className="text-[10px] font-mono font-bold bg-navy-800 px-2 py-0.5 rounded text-navy-100/50">{unpickedMembers.length}</span>
                     </div>
                     
                     <div className="flex flex-wrap gap-2">
-                      {availability.in.length === 0 && <p className="text-navy-100/20 text-xs italic px-2">No players confirmed yet.</p>}
-                      {availability.in.map(u => {
+                      {unpickedMembers.length === 0 && <p className="text-navy-100/20 text-xs italic px-2">No available members.</p>}
+                      {unpickedMembers.map(u => {
                         const isC1 = match?.captain1Id === u.id;
                         const isC2 = match?.captain2Id === u.id;
                         
                         return (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${isC1 || isC2 ? 'bg-cricket-gold/20 border-cricket-gold/50 shadow-sm' : 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20'}`}>
-                           <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isC1 || isC2 ? 'bg-cricket-gold text-navy-900' : 'bg-green-500/20 text-green-400'}`}>
-                             {isC1 ? 'C1' : isC2 ? 'C2' : u.name.charAt(0)}
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${isC1 ? 'bg-red-500/10 border-red-500/50 shadow-sm' : isC2 ? 'bg-blue-500/10 border-blue-500/50 shadow-sm' : 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20'}`}>
+                           {/* Avatar / Captain Cycle */}
+                           <div 
+                               onClick={(e) => {
+                                   if (!isAdmin) return;
+                                   e.stopPropagation();
+                                   if (isC1) handleSetCaptain(u.id, '2'); // Red -> Blue
+                                   else if (isC2) handleSetCaptain(u.id, null); // Blue -> None
+                                   else handleSetCaptain(u.id, '1'); // None -> Red
+                               }}
+                               className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${isAdmin ? 'cursor-pointer hover:scale-110' : ''} ${isC1 ? 'bg-red-500 text-white' : isC2 ? 'bg-blue-500 text-white' : 'bg-green-500/20 text-green-400'}`}
+                               title={isAdmin ? "Click to cycle: Red Captain -> Blue Captain -> None" : ""}
+                           >
+                             {isC1 ? 'R' : isC2 ? 'B' : u.name.charAt(0)}
                            </div>
-                           <span className={`text-xs font-medium ${isC1 || isC2 ? 'text-cricket-gold' : 'text-green-100'}`}>{u.name}</span>
+                           
+                           <span className={`text-xs font-medium ${isC1 ? 'text-red-400' : isC2 ? 'text-blue-400' : 'text-navy-100'}`}>{u.name}</span>
                            {u.guests > 0 && (
                              <span className="ml-1 text-[10px] bg-green-500/20 text-green-400 px-1.5 rounded-full font-bold">+{u.guests}</span>
                            )}
-                           
-                           {isAdmin && (
-                               <div className="flex ml-auto gap-1.5 pl-2">
-                                   <button 
-                                     onClick={(e) => { e.stopPropagation(); handleSetCaptain(u.id, isC1 ? null : '1'); }}
-                                     className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold border transition-colors ${isC1 ? 'bg-cricket-gold text-navy-900 border-cricket-gold shadow-sm' : 'bg-navy-800 text-navy-300 border-navy-600 hover:border-cricket-gold hover:text-cricket-gold'}`}
-                                     title={isC1 ? "Remove Captain 1" : "Set as Captain 1"}
-                                   >1</button>
-                                   <button 
-                                     onClick={(e) => { e.stopPropagation(); handleSetCaptain(u.id, isC2 ? null : '2'); }}
-                                     className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold border transition-colors ${isC2 ? 'bg-cricket-gold text-navy-900 border-cricket-gold shadow-sm' : 'bg-navy-800 text-navy-300 border-navy-600 hover:border-cricket-gold hover:text-cricket-gold'}`}
-                                     title={isC2 ? "Remove Captain 2" : "Set as Captain 2"}
-                                   >2</button>
+
+                           {/* Captain Picking Actions */}
+                           {(canPickTeam1 || canPickTeam2) && !isC1 && !isC2 && (
+                               <div className="flex ml-2 gap-1 pl-2 border-l border-navy-700/50">
+                                   {canPickTeam1 && (
+                                       <button 
+                                         onClick={() => handlePickPlayer(u.id, 'team1')}
+                                         className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                                         title="Add to Spartans"
+                                       >
+                                         <Plus size={12} />
+                                       </button>
+                                   )}
+                                   {canPickTeam2 && (
+                                       <button 
+                                         onClick={() => handlePickPlayer(u.id, 'team2')}
+                                         className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-colors"
+                                         title="Add to Warriors"
+                                       >
+                                         <Plus size={12} />
+                                       </button>
+                                   )}
                                </div>
                            )}
                         </motion.div>
@@ -630,6 +1079,102 @@ export default function Dashboard({
                   </div>
 
                   <div className="h-px bg-navy-800/50" />
+
+                  {/* Guest Pool */}
+                  {unpickedGuests.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+                             Guest Pool
+                          </h4>
+                          <span className="text-[10px] font-mono font-bold bg-navy-800 px-2 py-0.5 rounded text-navy-100/50">{unpickedGuests.length}</span>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2">
+                           {unpickedGuests.map(u => (
+                             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-teal-500/10 border-teal-500/20">
+                                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-teal-500/20 text-teal-400">G</div>
+                                <span className="text-xs font-medium text-teal-400">{u.displayName || u.name}</span>
+                                
+                                {(canPickTeam1 || canPickTeam2) && (
+                                   <div className="flex ml-2 gap-1 pl-2 border-l border-navy-700/50">
+                                       {canPickTeam1 && (
+                                           <button 
+                                             onClick={() => handlePickPlayer(u.id, 'team1')}
+                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                                             title="Add to Spartans"
+                                           >
+                                             <Plus size={12} />
+                                           </button>
+                                       )}
+                                       {canPickTeam2 && (
+                                           <button 
+                                             onClick={() => handlePickPlayer(u.id, 'team2')}
+                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-colors"
+                                             title="Add to Warriors"
+                                           >
+                                             <Plus size={12} />
+                                           </button>
+                                       )}
+                                   </div>
+                                )}
+                             </motion.div>
+                           ))}
+                        </div>
+                      </div>
+                  )}
+
+                  <div className="h-px bg-navy-800/50" />
+
+                  {/* Waiting List */}
+                  {waitListPlayers.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-yellow-600 uppercase tracking-wider flex items-center gap-2">
+                            <Clock size={14} className="text-yellow-600" />
+                            Waiting List
+                          </h4>
+                          <span className="text-[10px] font-mono font-bold bg-navy-800 px-2 py-0.5 rounded text-navy-100/50">{waitListPlayers.length}</span>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2">
+                          {waitListPlayers.map((u, i) => (
+                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-yellow-900/10 border-yellow-700/30">
+                               <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-yellow-700/20 text-yellow-600">
+                                 {i + 1}
+                               </div>
+                               <span className="text-xs font-medium text-yellow-600">{u.displayName || u.name}</span>
+
+                               {(canPickTeam1 || canPickTeam2) && (
+                                   <div className="flex ml-2 gap-1 pl-2 border-l border-yellow-700/30">
+                                       {canPickTeam1 && (
+                                           <button 
+                                             onClick={() => handlePickPlayer(u.id, 'team1')}
+                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                                             title="Add to Spartans"
+                                           >
+                                             <Plus size={12} />
+                                           </button>
+                                       )}
+                                       {canPickTeam2 && (
+                                           <button 
+                                             onClick={() => handlePickPlayer(u.id, 'team2')}
+                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-colors"
+                                             title="Add to Warriors"
+                                           >
+                                             <Plus size={12} />
+                                           </button>
+                                       )}
+                                   </div>
+                               )}
+                            </motion.div>
+                          ))}
+                        </div>
+                      </div>
+                  )}
+
+                  {waitListPlayers.length > 0 && <div className="h-px bg-navy-800/50" />}
 
                   {/* OUT */}
                   <div className="space-y-3">
@@ -669,21 +1214,19 @@ export default function Dashboard({
             )}
           </AnimatePresence>
 
-          <div className="mt-8 pt-6 border-t border-navy-800/50">
-             <h4 className="text-[10px] text-navy-100/20 uppercase tracking-widest font-bold mb-4">All Players</h4>
-             <div className="flex flex-wrap gap-1.5">
-               {users.map(u => (
-                 <span key={u.id} className="text-[10px] px-2 py-1 bg-navy-900/50 rounded border border-navy-800/50 text-navy-100/30 hover:text-navy-100/60 hover:border-navy-700 transition-colors">
-                   {u.name}
-                 </span>
-               ))}
-               {users.length === 0 && <span className="text-navy-100/20 text-xs">Loading roster...</span>}
-             </div>
-          </div>
+
         </aside>
         </>
         )}
       </main>
+
+      <GuestNameModal
+        isOpen={isGuestModalOpen}
+        onClose={() => setIsGuestModalOpen(false)}
+        onSubmit={handleGuestSubmit}
+        count={pendingGuestCount}
+        currentNames={myStatusObj?.guestNames || []}
+      />
 
       <CreateMatchModal 
         isOpen={isMatchModalOpen}
@@ -692,6 +1235,23 @@ export default function Dashboard({
         onCreate={handleCreateMatch}
         saving={creatingMatch}
       />
+
+      <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+        {match && (
+            <MatchShareCard 
+                ref={shareCardRef}
+                team1={team1Players}
+                team2={team2Players}
+                matchDetails={{
+                    date: selectedDate,
+                    venue: match.venue,
+                    time: match.time,
+                    captain1Name: users.find(u => u.id === match.captain1Id)?.name,
+                    captain2Name: users.find(u => u.id === match.captain2Id)?.name
+                }}
+            />
+        )}
+      </div>
     </div>
   );
 }
