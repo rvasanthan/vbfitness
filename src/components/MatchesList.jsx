@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { collection, query, orderBy, getDocs, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../firebase';
 import { format } from 'date-fns';
-import { MapPin, Clock, Trophy, Swords, Trash2, Calendar, Loader2, CheckCircle, Users } from 'lucide-react';
+import { MapPin, Clock, Trophy, Swords, Trash2, Calendar, Loader2, CheckCircle, Users, Navigation } from 'lucide-react';
 import { parseLocalDate } from '../utils/dateHelpers';
 import PlayerStatusModal from './PlayerStatusModal';
 
@@ -45,31 +45,34 @@ export default function MatchesList({ isAdmin, user, users }) {
           
           const matchRef = doc(db, 'matches', matchId);
           await updateDoc(matchRef, {
-              checkedInPlayers: isCheckedIn ? arrayRemove(targetUserId) : arrayUnion(targetUserId)
+              checkedInPlayers: isCheckedIn ? arrayRemove(targetUserId) : arrayUnion(targetUserId),
+              onMyWayPlayers: arrayRemove(targetUserId) // Ensure they are removed from OMW if checking in
           });
           
           // Update local state to reflect immediately
-          const updateLocalState = (players = []) => {
-              if (isCheckedIn) return players.filter(id => id !== targetUserId);
-              return [...players, targetUserId];
+          const updateLocalState = (m) => {
+              let newCheckedIn = m.checkedInPlayers || [];
+              let newOnMyWay = m.onMyWayPlayers || [];
+
+              if (isCheckedIn) {
+                   newCheckedIn = newCheckedIn.filter(id => id !== targetUserId);
+              } else {
+                   newCheckedIn = [...newCheckedIn, targetUserId];
+                   newOnMyWay = newOnMyWay.filter(id => id !== targetUserId);
+              }
+              return { ...m, checkedInPlayers: newCheckedIn, onMyWayPlayers: newOnMyWay };
           };
 
           setMatches(matches.map(m => {
               if (m.id === matchId) {
-                  return {
-                      ...m,
-                      checkedInPlayers: updateLocalState(m.checkedInPlayers)
-                  };
+                  return updateLocalState(m);
               }
               return m;
           }));
 
           // Update modal state if open
           if (statusModalMatch && statusModalMatch.id === matchId) {
-              setStatusModalMatch(prev => ({
-                  ...prev,
-                  checkedInPlayers: updateLocalState(prev.checkedInPlayers)
-              }));
+              setStatusModalMatch(prev => updateLocalState(prev));
           }
       } catch (e) {
           console.error("Check in toggle failed", e);
@@ -77,6 +80,41 @@ export default function MatchesList({ isAdmin, user, users }) {
       } finally {
           setCheckingIn(null);
       }
+  };
+
+  const handleOnMyWay = async (matchId) => {
+    try {
+        const match = matches.find(m => m.id === matchId);
+        const isOnMyWay = match?.onMyWayPlayers?.includes(user?.uid);
+        
+        const matchRef = doc(db, 'matches', matchId);
+        await updateDoc(matchRef, {
+            onMyWayPlayers: isOnMyWay ? arrayRemove(user.uid) : arrayUnion(user.uid)
+        });
+
+         // Update local
+         const updateLocalState = (m) => {
+            let newOnMyWay = m.onMyWayPlayers || [];
+            if (isOnMyWay) {
+                newOnMyWay = newOnMyWay.filter(id => id !== user.uid);
+            } else {
+                newOnMyWay = [...newOnMyWay, user.uid];
+            }
+            return { ...m, onMyWayPlayers: newOnMyWay };
+        };
+
+        setMatches(matches.map(m => {
+            if (m.id === matchId) return updateLocalState(m);
+            return m;
+        }));
+
+        if (statusModalMatch && statusModalMatch.id === matchId) {
+            setStatusModalMatch(prev => updateLocalState(prev));
+        }
+
+    } catch (e) {
+        console.error("On my way toggle failed", e);
+    }
   };
 
   // Filter out past matches
@@ -173,7 +211,8 @@ export default function MatchesList({ isAdmin, user, users }) {
              {/* Actions */}
              <div className="flex gap-2">
                  {/* Check In Button */}
-                 {isPlayerInRoster && (
+                 {(isPlayerInRoster || isAdmin) && (
+                     <>
                      <button
                         onClick={() => !isCheckedIn && handleCheckIn(match.id)}
                         disabled={isCheckedIn || checkingIn === match.id}
@@ -188,6 +227,21 @@ export default function MatchesList({ isAdmin, user, users }) {
                         }
                         {isCheckedIn ? 'Checked In' : 'Check In'}
                      </button>
+                     
+                     {!isCheckedIn && (
+                        <button
+                            onClick={() => handleOnMyWay(match.id)}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all border ${
+                                match.onMyWayPlayers?.includes(user?.uid)
+                                ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50'
+                                : 'bg-navy-800 text-navy-100/60 border-navy-700 hover:border-navy-500 hover:text-navy-100'
+                            }`}
+                        >
+                            <Navigation size={14} className={match.onMyWayPlayers?.includes(user?.uid) ? "fill-indigo-400/20" : ""} />
+                            {match.onMyWayPlayers?.includes(user?.uid) ? 'On my way' : 'On my way'}
+                        </button>
+                     )}
+                     </>
                  )}
 
                  {/* Player Status Button */}
