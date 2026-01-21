@@ -1,16 +1,22 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, getDocs, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, deleteField } from 'firebase/firestore';
 import { db } from '../firebase';
 import { format } from 'date-fns';
-import { MapPin, Clock, Trophy, Swords, Trash2, Calendar, Loader2, CheckCircle, Users, Navigation } from 'lucide-react';
+import { MapPin, Clock, Trophy, Swords, Trash2, Calendar, Loader2, CheckCircle, Users, Navigation, Disc, Play, RotateCcw } from 'lucide-react';
 import { parseLocalDate } from '../utils/dateHelpers';
 import PlayerStatusModal from './PlayerStatusModal';
+import TossModal from './TossModal';
+import ScoringSetupModal from './ScoringSetupModal';
+import ScoringInterface from './ScoringInterface';
 
 export default function MatchesList({ isAdmin, user, users }) {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(null);
   const [statusModalMatch, setStatusModalMatch] = useState(null);
+  const [tossModalMatch, setTossModalMatch] = useState(null);
+  const [scoringSetupMatch, setScoringSetupMatch] = useState(null);
+  const [activeScoringMatch, setActiveScoringMatch] = useState(null);
 
   useEffect(() => {
     async function fetchMatches() {
@@ -117,6 +123,80 @@ export default function MatchesList({ isAdmin, user, users }) {
     }
   };
 
+  const handleSaveToss = async (matchId, tossData) => {
+    try {
+        const matchRef = doc(db, 'matches', matchId);
+        await updateDoc(matchRef, tossData);
+        
+        // Update local state
+        setMatches(matches.map(m => {
+            if (m.id === matchId) {
+                return { ...m, ...tossData };
+            }
+            return m;
+        }));
+    } catch (e) {
+        console.error("Error saving toss:", e);
+        alert("Failed to save toss result");
+    }
+  };
+
+  const handleStartMatchInteraction = (match) => {
+      // If toss hasn't happened yet, warn or allow anyway? 
+      // Ideally toss should happen.
+      if (!match.tossWinner) {
+          alert("Please record the Toss result first.");
+          return;
+      }
+      setScoringSetupMatch(match);
+  };
+
+  const handleStartScoring = async (matchId, startData) => {
+    try {
+        const matchRef = doc(db, 'matches', matchId);
+        await updateDoc(matchRef, startData);
+        
+        // Update local
+        setMatches(matches.map(m => {
+            if (m.id === matchId) return { ...m, ...startData };
+            return m;
+        }));
+    } catch (e) {
+        console.error("Start match failed", e);
+        alert("Failed to start match");
+    }
+  };
+
+  const handleResetMatch = async (matchId) => {
+      if (!confirm("Are you SURE you want to Reset this match?\n\nThis will ERASE the Toss, Score, and Status. It cannot be undone.")) return;
+      try {
+          const matchRef = doc(db, 'matches', matchId);
+          await updateDoc(matchRef, {
+              status: 'scheduled',
+              tossWinner: deleteField(),
+              tossWinnerName: deleteField(),
+              tossChoice: deleteField(),
+              scoring: deleteField()
+          });
+
+          // Update local
+          setMatches(matches.map(m => {
+              if (m.id === matchId) {
+                  const newMatch = { ...m, status: 'scheduled' };
+                  delete newMatch.tossWinner;
+                  delete newMatch.tossWinnerName;
+                  delete newMatch.tossChoice;
+                  delete newMatch.scoring;
+                  return newMatch;
+              }
+              return m;
+          }));
+      } catch (e) {
+          console.error("Match reset failed", e);
+          alert("Failed to reset match");
+      }
+  };
+
   // Filter out past matches
   const upcomingMatches = matches.filter(match => {
       // Create date at midnight for comparison
@@ -159,6 +239,8 @@ export default function MatchesList({ isAdmin, user, users }) {
           
           const isPlayerInRoster = (match.team1?.includes(user?.uid) || match.team2?.includes(user?.uid));
           const isCheckedIn = match.checkedInPlayers?.includes(user?.uid);
+          const isCaptain = match.captain1Id === user?.uid || match.captain2Id === user?.uid;
+          const canManageToss = isAdmin || isCaptain;
 
           return (
           <div key={match.id} className="bg-navy-900 border border-navy-800 rounded-xl p-5 shadow-sm hover:border-navy-700 transition-colors relative group">
@@ -199,58 +281,142 @@ export default function MatchesList({ isAdmin, user, users }) {
              </div>
 
              {/* Details */}
-             <div className="space-y-2.5 text-sm text-navy-100/60 border-t border-navy-800/50 pt-4 mb-4">
-               <div className="flex items-center gap-2.5">
-                 <MapPin size={14} className="text-navy-100/40" /> {match.venue || 'TBD'}
+             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-navy-100/60 border-t border-navy-800/50 pt-3 mb-3">
+               <div className="flex items-center gap-1.5">
+                 <MapPin size={14} className="text-navy-100/40" /> {match.venue || 'Rahway River Park'}
                </div>
-               <div className="flex items-center gap-2.5">
-                 <Clock size={14} className="text-navy-100/40" /> {match.time || 'TBD'}
+               <div className="flex items-center gap-1.5">
+                 <Clock size={14} className="text-navy-100/40" /> {match.time || '1:00 PM'}
                </div>
              </div>
+
+             {/* Toss Result Badge */}
+             {match.tossWinner && (
+                <div className="mb-4 bg-navy-950/50 border border-navy-800 rounded-lg p-3 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-cricket-gold/10 flex items-center justify-center shrink-0">
+                        <Disc size={16} className="text-cricket-gold animate-pulse" />
+                    </div>
+                    <div>
+                        <div className="text-xs font-bold text-navy-100">
+                            <span className={match.tossWinner === 'team1' ? 'text-red-400' : 'text-blue-400'}>
+                                {match.tossWinnerName || (match.tossWinner === 'team1' ? 'Spartans' : 'Warriors')}
+                            </span>
+                            <span className="text-navy-100/60"> won the toss</span>
+                        </div>
+                        <div className="text-[10px] text-navy-100/40 font-medium uppercase tracking-wider">
+                            Elected to {match.tossChoice}
+                        </div>
+                    </div>
+                </div>
+             )}
              
-             {/* Actions */}
-             <div className="flex gap-2">
-                 {/* Check In Button */}
-                 {(isPlayerInRoster || isAdmin) && (
-                     <>
-                     <button
-                        onClick={() => !isCheckedIn && handleCheckIn(match.id)}
-                        disabled={isCheckedIn || checkingIn === match.id}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
-                            isCheckedIn 
-                            ? 'bg-green-500/20 text-green-400 cursor-default'
-                            : 'bg-cricket-gold text-navy-950 hover:bg-white'
-                        }`}
-                     >
-                        {checkingIn === match.id ? <Loader2 className="animate-spin" size={14} /> : 
-                         isCheckedIn ? <CheckCircle size={14} /> : null
-                        }
-                        {isCheckedIn ? 'Checked In' : 'Check In'}
-                     </button>
+                          {/* Actions Area */}
+             <div className="flex flex-col gap-3">
+                 
+                 {/* Admin / Captain Controls */}
+                 {canManageToss && (
+                    <div className="grid grid-cols-[1fr_auto] gap-2 p-2 bg-navy-950/40 rounded-lg border border-navy-800/50">
+                        <div className="grid grid-cols-2 gap-2">
+                             {/* Win Toss */}
+                             {!match.tossWinner ? (
+                                <button
+                                    onClick={() => setTossModalMatch(match)}
+                                    className="flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold bg-navy-800 text-navy-100 hover:bg-navy-700 hover:text-white transition-all border border-navy-700"
+                                >
+                                    <Disc size={14} /> Win Toss
+                                </button>
+                             ) : (
+                                <div className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-navy-900/50 text-navy-100/30 border border-navy-800 border-dashed cursor-default">
+                                    <CheckCircle size={12} /> Toss Done
+                                </div>
+                             )}
+
+                             {/* Start / Score Match */}
+                             {match.status !== 'active' ? (
+                                <button
+                                    onClick={() => handleStartMatchInteraction(match)}
+                                    className="flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold bg-green-600 text-white hover:bg-green-500 transition-all shadow-lg shadow-green-900/20"
+                                >
+                                    <Play size={14} fill="currentColor" /> Start Match
+                                </button>
+                             ) : (
+                                <button
+                                    onClick={() => setActiveScoringMatch(match)}
+                                    className="flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold bg-gradient-to-r from-red-600 to-red-500 text-white hover:from-red-500 hover:to-red-400 transition-all shadow-lg shadow-red-900/20 border border-red-500/20 animate-pulse"
+                                >
+                                    <Trophy size={14} fill="currentColor" /> Score Live
+                                </button>
+                             )}
+                        </div>
+
+                        {/* Reset Button */}
+                        {(match.tossWinner || match.status === 'active' || isAdmin) && (
+                            <button
+                                onClick={() => handleResetMatch(match.id)}
+                                className="w-10 flex items-center justify-center rounded-lg bg-navy-900 text-red-500 hover:bg-red-500/10 border border-navy-700 hover:border-red-500/30 transition-all"
+                                title="Reset Match"
+                            >
+                                <RotateCcw size={16} />
+                            </button>
+                        )}
+                    </div>
+                 )}
+
+                 {/* Player Participation Controls */}
+                 <div className="grid grid-cols-3 gap-2">
+                     {/* Check In */}
+                     {(isPlayerInRoster || isAdmin) ? (
+                        <button
+                            onClick={() => !isCheckedIn && handleCheckIn(match.id)}
+                            disabled={isCheckedIn || checkingIn === match.id}
+                            className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                                isCheckedIn 
+                                ? 'bg-green-500/10 text-green-500 border border-green-500/20 cursor-default'
+                                : 'bg-cricket-gold text-navy-950 hover:bg-white shadow-[0_0_15px_rgba(255,215,0,0.1)]'
+                            }`}
+                        >
+                            {checkingIn === match.id ? <Loader2 className="animate-spin" size={14} /> : 
+                            isCheckedIn ? <CheckCircle size={14} /> : null
+                            }
+                            {isCheckedIn ? 'Checked In' : 'Check In'}
+                        </button>
+                     ) : (
+                         <div className="bg-navy-950/30 border border-navy-800/30 rounded-lg" /> 
+                         // Placeholder to keep grid structure if button missing
+                     )}
                      
-                     {!isCheckedIn && (
+                     {/* On My Way - Only show if eligible and NOT checked in yet */}
+                     {(!isCheckedIn && (isPlayerInRoster || isAdmin)) ? (
                         <button
                             onClick={() => handleOnMyWay(match.id)}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all border ${
+                            className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all border ${
                                 match.onMyWayPlayers?.includes(user?.uid)
                                 ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50'
                                 : 'bg-navy-800 text-navy-100/60 border-navy-700 hover:border-navy-500 hover:text-navy-100'
                             }`}
                         >
                             <Navigation size={14} className={match.onMyWayPlayers?.includes(user?.uid) ? "fill-indigo-400/20" : ""} />
-                            {match.onMyWayPlayers?.includes(user?.uid) ? 'On my way' : 'On my way'}
+                            {match.onMyWayPlayers?.includes(user?.uid) ? 'On way' : 'On way'}
                         </button>
+                     ) : (
+                        // If checked in, occupy space or hide? 
+                        // If we hide, grid might shift. Let's render an "Info" or disabled state if checked in?
+                        // Actually if checked in, OMW is irrelevant. Let's put a "Status" button here if we want to fill space? 
+                        // Or just let grid handle it.
+                        <div className={`hidden`} /> 
                      )}
-                     </>
-                 )}
 
-                 {/* Player Status Button */}
-                 <button
-                    onClick={() => setStatusModalMatch(match)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold bg-navy-800 text-navy-100 hover:bg-navy-700 transition-colors"
-                 >
-                    <Users size={14} /> Status
-                 </button>
+                     {/* Status Button - Always visible */}
+                     <button
+                        onClick={() => setStatusModalMatch(match)}
+                        className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold bg-navy-800 text-navy-100/70 hover:bg-navy-700 transition-colors border border-navy-700/50 ${
+                            // Span 2 cols if Checked In (since OMW is hidden)
+                            isCheckedIn ? 'col-span-2' : ''
+                        }`}
+                     >
+                        <Users size={14} /> Roster
+                     </button>
+                 </div>
              </div>
 
 
@@ -274,6 +440,32 @@ export default function MatchesList({ isAdmin, user, users }) {
         onClose={() => setStatusModalMatch(null)}
         isAdmin={isAdmin}
         onCheckIn={handleCheckIn}
+      />
+
+      <TossModal 
+        isOpen={!!tossModalMatch}
+        match={tossModalMatch}
+        onClose={() => setTossModalMatch(null)}
+        onSave={handleSaveToss}
+      />
+
+      <ScoringSetupModal 
+        isOpen={!!scoringSetupMatch}
+        match={scoringSetupMatch}
+        users={users}
+        onClose={() => setScoringSetupMatch(null)}
+        onStartScoring={handleStartScoring}
+      />
+
+      <ScoringInterface 
+          isOpen={!!activeScoringMatch}
+          match={activeScoringMatch}
+          users={users}
+          onClose={() => setActiveScoringMatch(null)}
+          onUpdateLocal={(updatedMatch) => {
+              setActiveScoringMatch(updatedMatch); 
+              setMatches(matches.map(m => m.id === updatedMatch.id ? updatedMatch : m));
+          }}
       />
     </div>
   );
