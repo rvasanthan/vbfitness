@@ -22,7 +22,7 @@ export default function CricketVideoBackground() {
         >
             <source src={videoUrl} type="video/mp4" />
         </video>
-        <div className="absolute inset-0 bg-navy-900/80" />
+        <div className="absolute inset-0 bg-bg-primary/80" />
         </>
       ) : (
         <DesktopCricketAnimation />
@@ -40,7 +40,7 @@ function ParticlesOverlay() {
        {[...Array(15)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute bg-cricket-gold/10 rounded-full"
+            className="absolute bg-accent/10 rounded-full"
             initial={{ 
               x: Math.random() * window.innerWidth, 
               y: Math.random() * window.innerHeight,
@@ -67,9 +67,9 @@ function ParticlesOverlay() {
 
 function DesktopCricketAnimation() {
     return (
-        <div className="absolute inset-0 bg-navy-900 overflow-hidden">
+        <div className="absolute inset-0 bg-bg-primary overflow-hidden">
              {/* Field Green Gradient at bottom */}
-             <div className="absolute bottom-0 w-full h-1/3 bg-gradient-to-t from-green-900/40 to-transparent" />
+             <div className="absolute bottom-0 w-full h-1/3 bg-gradient-to-t from-success/20 to-transparent" />
              
              {/* Animated Cricket Ball */}
              <motion.div 

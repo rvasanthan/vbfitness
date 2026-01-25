@@ -17,71 +17,72 @@ export default function CreateMatchModal({ isOpen, onClose, date, onCreate, savi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-navy-900 w-full max-w-md rounded-2xl shadow-2xl border border-navy-800 overflow-hidden"
+        className="bg-bg-secondary w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden"
       >
-        <div className="px-6 py-4 border-b border-navy-800 bg-navy-950/50 flex justify-between items-center">
-          <h3 className="text-xl font-bold text-navy-100">Create Match</h3>
-          <button onClick={onClose} className="p-2 hover:bg-navy-800 rounded-full text-navy-100/50 hover:text-navy-100 transition-colors">
+        <div className="px-6 py-4 border-b border-border bg-bg-primary/50 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-text-primary">Create Match</h3>
+          <button onClick={onClose} className="p-2 hover:bg-bg-tertiary rounded-full text-text-tertiary hover:text-text-primary transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-bold text-navy-100/50 uppercase tracking-wider mb-1.5">Date</label>
-            <div className="flex items-center gap-2 p-3 bg-navy-950/50 rounded-lg border border-navy-800 text-navy-100 opacity-60">
+            <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Date</label>
+            <div className="flex items-center gap-2 p-3 bg-bg-primary/50 rounded-lg border border-border text-text-primary opacity-60">
               <Calendar size={16} />
               <span className="text-sm font-medium">{date}</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-navy-100/50 uppercase tracking-wider mb-1.5">Venue</label>
+            <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Venue</label>
             <div className="relative">
-              <MapPin size={16} className="absolute left-3 top-3.5 text-navy-100/30" />
+              <MapPin size={16} className="absolute left-3 top-3.5 text-text-tertiary" />
               <input 
                 type="text" 
                 required
                 value={formData.venue}
                 onChange={(e) => setFormData({...formData, venue: e.target.value})}
-                className="w-full pl-10 p-3 bg-navy-950 rounded-lg border border-navy-800 text-navy-100 focus:outline-none focus:border-cricket-gold/50 transition-colors"
+                className="w-full pl-10 p-3 bg-bg-primary rounded-lg border border-border text-text-primary focus:outline-none focus:border-accent transition-colors"
+                style={{ colorScheme: 'dark' }} // To handle autofill and color variations
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-navy-100/50 uppercase tracking-wider mb-1.5">Time</label>
+              <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Time</label>
               <div className="relative">
-                <Clock size={16} className="absolute left-3 top-3.5 text-navy-100/30" />
+                <Clock size={16} className="absolute left-3 top-3.5 text-text-tertiary" />
                 <input 
                   type="time" 
                   required
                   value={formData.time}
                   onChange={(e) => setFormData({...formData, time: e.target.value})}
-                  className="w-full pl-10 p-3 bg-navy-950 rounded-lg border border-navy-800 text-navy-100 focus:outline-none focus:border-cricket-gold/50 transition-colors"
+                  className="w-full pl-10 p-3 bg-bg-primary rounded-lg border border-border text-text-primary focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-navy-100/50 uppercase tracking-wider mb-1.5">Format</label>
+              <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Format</label>
               <div className="relative">
-                <Trophy size={16} className="absolute left-3 top-3.5 text-navy-100/30" />
+                <Trophy size={16} className="absolute left-3 top-3.5 text-text-tertiary" />
                 <select 
                   value={formData.format}
                   onChange={(e) => setFormData({...formData, format: e.target.value})}
-                  className="w-full pl-10 p-3 bg-navy-950 rounded-lg border border-navy-800 text-navy-100 focus:outline-none focus:border-cricket-gold/50 transition-colors appearance-none"
+                  className="w-full pl-10 p-3 bg-bg-primary rounded-lg border border-border text-text-primary focus:outline-none focus:border-accent transition-colors appearance-none"
                 >
-                  <option>40 Overs</option>
-                  <option>T20</option>
-                  <option>35 Overs</option>
-                  <option>Friendly</option>
+                  <option className="bg-bg-primary text-text-primary">40 Overs</option>
+                  <option className="bg-bg-primary text-text-primary">T20</option>
+                  <option className="bg-bg-primary text-text-primary">35 Overs</option>
+                  <option className="bg-bg-primary text-text-primary">Friendly</option>
                 </select>
               </div>
             </div>
@@ -91,14 +92,14 @@ export default function CreateMatchModal({ isOpen, onClose, date, onCreate, savi
             <button 
               type="button" 
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl bg-navy-800 text-navy-100 font-bold hover:bg-navy-700 transition-colors"
+              className="flex-1 py-3 rounded-xl bg-bg-tertiary text-text-primary font-bold hover:opacity-80 transition-opacity"
             >
               Cancel
             </button>
             <button 
               type="submit" 
               disabled={saving}
-              className="flex-1 py-3 rounded-xl bg-cricket-gold text-navy-900 font-bold hover:bg-yellow-500 transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-3 rounded-xl bg-accent text-white font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
             >
               {saving ? <Loader2 className="animate-spin" size={20} /> : 'Create Match'}
             </button>

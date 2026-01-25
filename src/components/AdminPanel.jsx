@@ -88,25 +88,25 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-navy-900 w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl border border-navy-800 flex flex-col overflow-hidden"
+        className="bg-bg-secondary w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-navy-800 bg-navy-950/50 flex justify-between items-center">
+        <div className="px-6 py-4 border-b border-border bg-bg-primary/50 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <Shield className="text-cricket-gold" />
-            <h2 className="text-xl font-bold text-navy-100">Admin Console</h2>
-            <span className="bg-navy-800 text-navy-100/50 text-xs px-2 py-0.5 rounded-full border border-navy-700">
+            <Shield className="text-accent" />
+            <h2 className="text-xl font-bold text-text-primary">Admin Console</h2>
+            <span className="bg-bg-tertiary text-text-tertiary text-xs px-2 py-0.5 rounded-full border border-border">
               {users.length} Users
             </span>
           </div>
           <button 
             onClick={onClose}
-            className="p-2 hover:bg-navy-800 rounded-full text-navy-100/50 hover:text-navy-100 transition-colors"
+            className="p-2 hover:bg-bg-tertiary rounded-full text-text-tertiary hover:text-text-primary transition-colors"
           >
             <XCircle size={24} />
           </button>
@@ -120,35 +120,35 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
                 key={user.id} 
                 className={`flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border transition-all ${
                   user.status === 'pending' 
-                    ? 'bg-yellow-500/5 border-yellow-500/20' 
+                    ? 'bg-warning/5 border-warning/20' 
                     : user.status === 'suspended'
-                    ? 'bg-red-500/5 border-red-500/20 opacity-75'
-                    : 'bg-navy-800/30 border-navy-800'
+                    ? 'bg-error/5 border-error/20 opacity-75'
+                    : 'bg-bg-primary/30 border-border'
                 }`}
               >
                 {/* User Info */}
                 <div className="flex items-center gap-4 flex-1">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
                     user.role === 'admin' 
-                      ? 'bg-cricket-gold text-navy-950 shadow-lg shadow-cricket-gold/20' 
-                      : 'bg-navy-800 text-navy-100/50'
+                      ? 'bg-accent text-white shadow-lg shadow-accent/20' 
+                      : 'bg-bg-tertiary text-text-tertiary'
                   }`}>
                     {user.role === 'admin' ? <Shield size={16} /> : (user.name?.[0] || <User size={16} />)}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-navy-100">{user.name}</h3>
+                      <h3 className="font-bold text-text-primary">{user.name}</h3>
                       {user.status === 'pending' && (
-                        <span className="text-[10px] uppercase font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded">Pending</span>
+                        <span className="text-[10px] uppercase font-bold text-warning bg-warning/10 px-2 py-0.5 rounded">Pending</span>
                       )}
                       {user.status === 'suspended' && (
-                        <span className="text-[10px] uppercase font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">Suspended</span>
+                        <span className="text-[10px] uppercase font-bold text-error bg-error/10 px-2 py-0.5 rounded">Suspended</span>
                       )}
                       {user.role === 'admin' && (
-                        <span className="text-[10px] uppercase font-bold text-cricket-gold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">Admin</span>
+                        <span className="text-[10px] uppercase font-bold text-accent bg-accent/10 px-2 py-0.5 rounded border border-accent/20">Admin</span>
                       )}
                     </div>
-                    <p className="text-sm text-navy-100/50">{user.email}</p>
+                    <p className="text-sm text-text-tertiary">{user.email}</p>
                   </div>
                 </div>
 
@@ -160,7 +160,7 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
                             <button
                                 disabled={processing === user.id}
                                 onClick={() => updateUserStatus(user.id, 'approved')}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors text-xs font-bold"
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-success/10 text-success border border-success/20 hover:bg-success/20 transition-colors text-xs font-bold"
                             > 
                                 {processing === user.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
                                 Approve
@@ -168,7 +168,7 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
                             <button
                                 disabled={processing === user.id}
                                 onClick={() => deleteUser(user.id)}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors text-xs font-bold"
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-error/10 text-error border border-error/20 hover:bg-error/20 transition-colors text-xs font-bold"
                             >
                                 <XCircle size={14} />
                                 Reject
@@ -180,7 +180,7 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
                         <button
                             disabled={processing === user.id}
                             onClick={() => updateUserStatus(user.id, 'suspended')}
-                            className="p-2 rounded-lg text-navy-100/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            className="p-2 rounded-lg text-text-tertiary hover:text-error hover:bg-error/10 transition-colors"
                             title="Suspend User"
                         >
                             <ShieldAlert size={18} />
@@ -191,7 +191,7 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
                          <button
                             disabled={processing === user.id}
                             onClick={() => updateUserStatus(user.id, 'approved')}
-                            className="p-2 rounded-lg text-navy-100/30 hover:text-green-400 hover:bg-green-500/10 transition-colors"
+                            className="p-2 rounded-lg text-text-tertiary hover:text-success hover:bg-success/10 transition-colors"
                             title="Reactivate User"
                          >
                              <CheckCircle size={18} />
@@ -200,17 +200,17 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
 
                     {/* Delete Action with Confirmation */}
                     {confirmDelete === user.id ? (
-                        <div className="flex items-center gap-2 ml-2 bg-red-950/50 p-1 rounded-lg border border-red-500/30">
-                            <span className="text-[10px] text-red-200 pl-2">Sure?</span>
+                        <div className="flex items-center gap-2 ml-2 bg-error/10 p-1 rounded-lg border border-error/30">
+                            <span className="text-[10px] text-error pl-2">Sure?</span>
                             <button 
                                 onClick={() => deleteUser(user.id)}
-                                className="p-1 hovered:bg-red-500 rounded text-red-500 hover:text-white"
+                                className="p-1 hover:bg-error rounded text-error hover:text-white transition-colors"
                             >
                                 <CheckCircle size={14} />
                             </button>
                             <button 
                                 onClick={() => setConfirmDelete(null)}
-                                className="p-1 rounded text-navy-100/50 hover:text-white"
+                                className="p-1 rounded text-text-tertiary hover:text-text-primary"
                             >
                                 <XCircle size={14} />
                             </button>
@@ -218,7 +218,7 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
                     ) : (
                         <button
                             onClick={() => setConfirmDelete(user.id)}
-                            className="p-2 rounded-lg text-navy-100/30 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                            className="p-2 rounded-lg text-text-tertiary hover:text-error hover:bg-error/10 transition-colors"
                             title="Remove Membership"
                         >
                             <Trash2 size={18} />
@@ -226,14 +226,14 @@ export default function AdminPanel({ users, onClose, onRefresh }) {
                     )}
 
                     {/* Role Selector */}
-                    <div className="ml-2 pl-2 border-l border-navy-800">
+                    <div className="ml-2 pl-2 border-l border-border">
                       <select 
                         value={user.role || 'user'} 
                         onChange={(e) => updateRole(user.id, e.target.value)}
-                        className={`bg-navy-950 border rounded px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-cricket-gold/50 ${
+                        className={`bg-bg-primary border rounded px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-accent/50 ${
                           user.role === 'admin' 
-                            ? 'text-cricket-gold border-cricket-gold/30' 
-                            : 'text-navy-100/50 border-navy-700'
+                            ? 'text-accent border-accent/30' 
+                            : 'text-text-tertiary border-border'
                         }`}
                         disabled={processing === user.id}
                       >

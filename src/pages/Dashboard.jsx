@@ -49,7 +49,8 @@ export default function Dashboard({
   statusMessage,
   isAdmin,
   onOpenAdmin,
-  onRefresh
+  onRefresh,
+  setActiveScoringMatch
 }) {
   const [guestCount, setGuestCount] = useState(0);
   const [viewMode, setViewMode] = useState('calendar');
@@ -620,7 +621,12 @@ export default function Dashboard({
            </div>
         ) : viewMode === 'matches' ? (
            <div className="lg:col-span-12">
-             <MatchesList isAdmin={isAdmin} user={user} users={users} />
+             <MatchesList 
+               isAdmin={isAdmin} 
+               user={user} 
+               users={users} 
+               setActiveScoringMatch={setActiveScoringMatch}
+             />
            </div>
         ) : (
           <>
@@ -628,17 +634,17 @@ export default function Dashboard({
         <section className="lg:col-span-12 space-y-8 order-2">
            <div className="flex items-center justify-between">
              <div>
-               <h2 className="text-2xl font-bold text-navy-100 tracking-tight">Season Calendar</h2>
-               <p className="text-navy-100/60 text-sm mt-1">Select dates to manage availability</p>
+               <h2 className="text-2xl font-bold text-text-primary tracking-tight">Season Calendar</h2>
+               <p className="text-text-tertiary text-sm mt-1">Select dates to manage availability</p>
              </div>
              
              {/* Legend */}
-             <div className="flex items-center gap-4 text-xs text-navy-100/50 font-medium">
+             <div className="flex items-center gap-4 text-xs text-text-tertiary font-medium">
                <div className="flex items-center gap-1.5">
-                 <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" /> Holiday
+                 <div className="w-2 h-2 rounded-full bg-error shadow-[0_0_8px_rgba(239,68,68,0.5)]" /> Holiday
                </div>
                <div className="flex items-center gap-1.5">
-                 <div className="w-2 h-2 rounded-full bg-cricket-gold shadow-[0_0_8px_rgba(245,158,11,0.5)]" /> Selected
+                 <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(245,158,11,0.5)]" /> Selected
                </div>
              </div>
            </div>
@@ -650,9 +656,9 @@ export default function Dashboard({
              className="grid grid-cols-1 gap-6"
            >
              {Object.keys(groupedByMonth).length === 0 && (
-               <div className="text-center py-20 bg-navy-900/30 rounded-2xl border border-dashed border-navy-800">
-                 <CalendarIcon className="w-8 h-8 text-navy-100/20 mx-auto mb-2" />
-                 <p className="text-navy-100/50">No dates loaded for {year}</p>
+               <div className="text-center py-20 bg-bg-secondary/30 rounded-2xl border border-dashed border-border">
+                 <CalendarIcon className="w-8 h-8 text-text-tertiary/20 mx-auto mb-2" />
+                 <p className="text-text-tertiary">No dates loaded for {year}</p>
                </div>
              )}
 
@@ -660,11 +666,11 @@ export default function Dashboard({
                <motion.div 
                  key={month} 
                  variants={item}
-                 className="bg-navy-900 border border-navy-800/50 rounded-2xl overflow-hidden backdrop-blur-sm shadow-sm"
+                 className="bg-bg-secondary border border-border rounded-2xl overflow-hidden backdrop-blur-sm shadow-sm"
                >
-                 <div className="bg-navy-800/30 px-6 py-4 border-b border-navy-800/50 flex justify-between items-center backdrop-blur-lg">
-                   <h3 className="font-bold text-navy-100 text-lg">{month}</h3>
-                   <span className="text-[10px] uppercase font-bold tracking-wider bg-navy-950/50 border border-navy-800 px-2 py-1 rounded text-navy-100/50">{dates.length} days</span>
+                 <div className="bg-bg-tertiary/30 px-6 py-4 border-b border-border flex justify-between items-center backdrop-blur-lg">
+                   <h3 className="font-bold text-text-primary text-lg">{month}</h3>
+                   <span className="text-[10px] uppercase font-bold tracking-wider bg-bg-primary/50 border border-border px-2 py-1 rounded text-text-tertiary">{dates.length} days</span>
                  </div>
                  <div className="p-6">
                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
@@ -680,23 +686,23 @@ export default function Dashboard({
                            onClick={() => setSelectedDate(dateStr)}
                            className={`relative flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200 h-20 ${
                              isSelected 
-                               ? 'bg-gradient-to-br from-cricket-gold to-yellow-600 border-yellow-400 text-white shadow-lg shadow-cricket-gold/20 z-10' 
+                               ? 'bg-accent border-accent text-white shadow-lg shadow-accent/20 z-10' 
                                : holidayName
-                                 ? 'bg-red-900/10 border-red-500/30 hover:border-red-500/50 hover:bg-red-900/20'
-                                 : 'bg-navy-800/30 border-navy-700/30 hover:border-navy-500 hover:bg-navy-800/60 text-navy-100'
+                                 ? 'bg-error/10 border-error/30 hover:border-error/50 hover:bg-error/20'
+                                 : 'bg-bg-tertiary/30 border-border hover:border-accent hover:bg-bg-tertiary/60 text-text-primary'
                            }`}
                          >
-                           <span className={`text-[10px] font-bold uppercase mb-0.5 tracking-wider ${isSelected ? 'text-white/80' : 'text-navy-100/50'}`}>
+                           <span className={`text-[10px] font-bold uppercase mb-0.5 tracking-wider ${isSelected ? 'text-white/80' : 'text-text-tertiary'}`}>
                              {parseLocalDate(dateStr).toLocaleDateString(undefined, { weekday: 'short' })}
                            </span>
-                           <span className={`text-xl font-bold ${isSelected ? 'text-white' : holidayName ? 'text-red-400' : 'text-navy-100'}`}>
+                           <span className={`text-xl font-bold ${isSelected ? 'text-white' : holidayName ? 'text-error' : 'text-text-primary'}`}>
                              {dateStr.split('-')[2]}
                            </span>
                            {holidayName && (
                              <div className="absolute top-1.5 right-1.5">
                                <span className="relative flex h-2 w-2">
-                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75"></span>
+                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-error"></span>
                                </span>
                              </div>
                            )}
@@ -720,15 +726,15 @@ export default function Dashboard({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="bg-navy-900 border border-navy-800 rounded-[2rem] p-6 shadow-xl"
+                className="bg-bg-secondary border border-border rounded-[2rem] p-6 shadow-xl"
               >
-                <div className="mb-8 p-4 bg-navy-950/50 rounded-2xl border border-navy-800/50">
-                  <p className="text-navy-100/50 text-[10px] uppercase font-bold tracking-widest mb-2">Selected Date</p>
-                  <h2 className="text-3xl font-bold text-navy-100 mb-2">{formatDayLabel(selectedDate)}</h2>
+                <div className="mb-8 p-4 bg-bg-primary/50 rounded-2xl border border-border/50">
+                  <p className="text-text-tertiary text-[10px] uppercase font-bold tracking-widest mb-2">Selected Date</p>
+                  <h2 className="text-3xl font-bold text-text-primary mb-2">{formatDayLabel(selectedDate)}</h2>
                   {availability.coffee && availability.coffee.length > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', backgroundColor: 'rgb(var(--color-coffee-light) / 0.15)', color: 'rgb(var(--color-coffee))', fontWeight: 700, border: `1px solid rgb(var(--color-coffee) / 0.3)` }}>
-                      <Coffee size={18} style={{ color: 'rgb(var(--color-coffee))' }} />
-                      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'rgb(var(--color-coffee))' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', backgroundColor: 'rgb(var(--raw-coffee-light) / 0.15)', color: 'rgb(var(--raw-coffee))', fontWeight: 700, border: `1px solid rgb(var(--raw-coffee) / 0.3)` }}>
+                      <Coffee size={18} style={{ color: 'rgb(var(--raw-coffee))' }} />
+                      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'rgb(var(--raw-coffee))' }}>
                         {availability.coffee.length === 1
                           ? `${availability.coffee[0].name} is bringing coffee`
                           : `${availability.coffee.map(u => u.name).join(', ')} are bringing coffee`}
@@ -736,7 +742,7 @@ export default function Dashboard({
                     </div>
                   )}
                   {holidays[selectedDate] && (
-                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-error/10 border border-error/20 text-error text-xs font-medium">
                        <Info size={12} />
                        {holidays[selectedDate]}
                      </div>
@@ -746,47 +752,47 @@ export default function Dashboard({
                 {/* Match Details / Admin Actions */}
                 <div className="mb-6">
                   {match ? (
-                    <div className="bg-navy-800/50 rounded-xl border border-navy-700/50 p-4 space-y-3">
+                    <div className="bg-bg-primary/50 rounded-xl border border-border/50 p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-bold text-navy-100 flex items-center gap-2">
-                           <Swords size={16} className="text-cricket-gold" />
+                        <h3 className="font-bold text-text-primary flex items-center gap-2">
+                           <Swords size={16} className="text-accent" />
                            {match?.opponent ? `vs ${match.opponent}` : 'Match Day'}
                         </h3>
                         {isAdmin && (
                             <button 
                                 onClick={handleAutoAssign}
-                                className="p-1.5 rounded-lg bg-navy-900 text-cricket-gold border border-navy-700 hover:border-cricket-gold hover:bg-cricket-gold/10 transition-colors"
+                                className="p-1.5 rounded-lg bg-bg-secondary text-accent border border-border hover:border-accent hover:bg-accent/10 transition-colors"
                                 title="Auto-Assign Captains (Round Robin)"
                                 disabled={creatingMatch}
                             >
-                                {creatingMatch ? <div className="w-4 h-4 rounded-full border-2 border-cricket-gold border-t-transparent animate-spin" /> : <Wand2 size={14} />}
+                                {creatingMatch ? <div className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin" /> : <Wand2 size={14} />}
                             </button>
                         )}
                         {match && (
-                           <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${match.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-navy-900 text-navy-100/50'}`}>
+                           <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${match.status === 'active' ? 'bg-success/20 text-success' : 'bg-bg-secondary text-text-tertiary'}`}>
                               {match.status}
                            </span>
                         )}
                       </div>
-                      <div className="text-xs text-navy-100/60 space-y-1">
+                      <div className="text-xs text-text-tertiary space-y-1">
                          <p>📍 {match?.venue || 'Rahway River Park'}</p>
                          <p>⏰ {match?.time || '13:00'} • {match?.format || '40 Overs'}</p>
                       </div>
 
                       {(match?.captain1Id || match?.captain2Id) && (
-                         <div className="flex gap-2 pt-2 pb-3 border-b border-navy-700/50">
+                         <div className="flex gap-2 pt-2 pb-3 border-b border-border/50">
                           {match.captain1Id && (
-                            <div className="flex items-center gap-1.5 px-2 py-1 bg-cricket-gold/10 rounded border border-cricket-gold/20">
-                               <span className="w-4 h-4 rounded-full bg-cricket-gold text-navy-900 text-[9px] font-bold flex items-center justify-center">C1</span>
-                               <span className="text-[10px] text-cricket-gold font-bold">
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-accent/10 rounded border border-accent/20">
+                               <span className="w-4 h-4 rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center">C1</span>
+                               <span className="text-[10px] text-accent font-bold">
                                  {users.find(u => u.id === match.captain1Id)?.name || 'C1'}
                                </span>
                             </div>
                           )}
                           {match.captain2Id && (
-                            <div className="flex items-center gap-1.5 px-2 py-1 bg-cricket-gold/10 rounded border border-cricket-gold/20">
-                               <span className="w-4 h-4 rounded-full bg-cricket-gold text-navy-900 text-[9px] font-bold flex items-center justify-center">C2</span>
-                               <span className="text-[10px] text-cricket-gold font-bold">
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-accent/10 rounded border border-accent/20">
+                               <span className="w-4 h-4 rounded-full bg-accent text-white text-[9px] font-bold flex items-center justify-center">C2</span>
+                               <span className="text-[10px] text-accent font-bold">
                                  {users.find(u => u.id === match.captain2Id)?.name || 'C2'}
                                </span>
                             </div>
@@ -830,7 +836,7 @@ export default function Dashboard({
                     {isAdmin && !match && (
                       <button 
                         onClick={() => setIsMatchModalOpen(true)}
-                        className="w-full py-2 bg-navy-800 text-navy-100 hover:bg-navy-700 rounded-lg text-xs font-bold border border-navy-700 transition-colors"                            
+                        className="w-full py-2 bg-bg-tertiary text-text-primary hover:bg-bg-secondary rounded-lg text-xs font-bold border border-border transition-colors"                            
                       >
                         Configure Match
                       </button>
@@ -841,9 +847,9 @@ export default function Dashboard({
                         <div className="flex flex-col gap-2">
                             <button
                                 onClick={() => setIsMatchModalOpen(true)}
-                                className="w-full py-3 border border-dashed border-navy-700 rounded-xl flex items-center justify-center gap-2 text-navy-100/50 hover:bg-navy-800/50 hover:text-cricket-gold hover:border-cricket-gold/30 transition-all group"
+                                className="w-full py-3 border border-dashed border-border rounded-xl flex items-center justify-center gap-2 text-text-tertiary hover:bg-bg-tertiary hover:text-accent hover:border-accent/30 transition-all group"
                             >
-                                <div className="p-1 rounded-full bg-navy-800 group-hover:bg-cricket-gold/20 transition-colors">
+                                <div className="p-1 rounded-full bg-bg-tertiary group-hover:bg-accent/20 transition-colors">
                                     <Plus size={16} />
                                 </div>
                                 <span className="text-xs font-bold uppercase tracking-wider">Create Match</span>
@@ -851,10 +857,10 @@ export default function Dashboard({
                             {availability.in.length > 2 && (
                                 <button 
                                     onClick={handleAutoAssign}
-                                    className="w-full py-2 bg-navy-800 text-cricket-gold hover:bg-navy-700 rounded-lg text-xs font-bold border border-navy-700 transition-colors flex items-center justify-center gap-2"                            
+                                    className="w-full py-2 bg-bg-tertiary text-accent hover:bg-bg-secondary rounded-lg text-xs font-bold border border-border transition-colors flex items-center justify-center gap-2"                            
                                     title="Auto-Assign Captains for Round Robin"
                                 >
-                                    {creatingMatch ? <div className="w-4 h-4 rounded-full border-2 border-cricket-gold border-t-transparent animate-spin" /> : <Wand2 size={14} />}
+                                    {creatingMatch ? <div className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin" /> : <Wand2 size={14} />}
                                     {creatingMatch ? 'Assigning...' : 'Auto-Assign Captains'}
                                 </button>
                             )}
@@ -862,7 +868,7 @@ export default function Dashboard({
                             {(availability.in.length > 0 || availability.out.length > 0) && (
                                 <button 
                                     onClick={onResetPool}
-                                    className="w-full py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-bold border border-red-500/20 transition-colors flex items-center justify-center gap-2 mt-2"
+                                    className="w-full py-2 bg-error/10 text-error hover:bg-error/20 rounded-lg text-xs font-bold border border-error/20 transition-colors flex items-center justify-center gap-2 mt-2"
                                     title="Clear all availability responses for this date"
                                 >
                                     <Trash2 size={14} />
@@ -881,29 +887,29 @@ export default function Dashboard({
                       <button
                         disabled={loading}
                         onClick={() => onSetStatus('in', guestCount)}
-                        className="relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-navy-800 hover:bg-green-100 border border-navy-700 hover:border-green-500 transition-all group active:scale-95"
+                        className="relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-bg-tertiary hover:bg-success/10 border border-border hover:border-success transition-all group active:scale-95"
                       >
-                        <CheckCircle2 className="w-8 h-8 text-navy-200 group-hover:text-green-600 transition-colors" />
-                        <span className="text-sm font-bold text-navy-100 group-hover:text-green-700">I'm In</span>
-                        <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <CheckCircle2 className="w-8 h-8 text-text-tertiary group-hover:text-success transition-colors" />
+                        <span className="text-sm font-bold text-text-primary group-hover:text-success">I'm In</span>
+                        <div className="absolute inset-0 bg-success/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </button>
                     )}
                     <button
                       disabled={loading}
                       onClick={() => onSetStatus('out')}
-                      className={`relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-navy-800 hover:bg-red-100 border border-navy-700 hover:border-red-500 transition-all group active:scale-95`}
+                      className={`relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-bg-tertiary hover:bg-error/10 border border-border hover:border-error transition-all group active:scale-95`}
                     >
-                      <XCircle className="w-8 h-8 text-navy-200 group-hover:text-red-500 transition-colors" />
-                      <span className="text-sm font-bold text-navy-100 group-hover:text-red-700">Can't Make It</span>
-                      <div className="absolute inset-0 bg-red-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <XCircle className="w-8 h-8 text-text-tertiary group-hover:text-error transition-colors" />
+                      <span className="text-sm font-bold text-text-primary group-hover:text-error">Can't Make It</span>
+                      <div className="absolute inset-0 bg-error/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                   </div>
 
                   {/* Removed duplicate Coffee Toggle Button below Can't Make It */}
                   
                   {/* Guest Selection */}
-                  <div className="bg-navy-800/50 p-4 rounded-xl border border-navy-700/50 flex flex-col gap-3">
-                    <div className="flex items-center gap-2 text-navy-100/70">
+                  <div className="bg-bg-primary/50 p-4 rounded-xl border border-border/50 flex flex-col gap-3">
+                    <div className="flex items-center gap-2 text-text-tertiary">
                       <Users size={16} />
                       <span className="text-sm font-medium">Bringing Guests to game?</span>
                     </div>
@@ -914,8 +920,8 @@ export default function Dashboard({
                           onClick={() => handleGuestClick(num)}
                           className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all ${
                             guestCount === num 
-                              ? 'bg-navy-100 text-navy-900 shadow-lg' 
-                              : 'bg-navy-900 text-navy-100/50 hover:bg-navy-800'
+                              ? 'bg-accent text-white shadow-lg' 
+                              : 'bg-bg-secondary text-text-tertiary hover:bg-bg-tertiary'
                           }`}
                         >
                           {num}
@@ -926,7 +932,7 @@ export default function Dashboard({
                 </div>
                 
                 {statusMessage && (
-                   <div className="mb-6 text-center text-xs font-medium text-cricket-gold bg-yellow-500/10 py-3 rounded-xl border border-yellow-500/10 animate-pulse">
+                   <div className="mb-6 text-center text-xs font-medium text-accent bg-accent/10 py-3 rounded-xl border border-accent/10 animate-pulse">
                      {statusMessage}
                    </div>
                 )}
@@ -938,21 +944,21 @@ export default function Dashboard({
                   {(match?.captain1Id || match?.captain2Id) && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* Team 1: Spartans */}
-                          <div className={`space-y-3 p-4 rounded-xl border ${isCaptain1 ? 'bg-red-900/10 border-red-500/30' : 'bg-navy-900/50 border-navy-800'}`}>
+                          <div className={`space-y-3 p-4 rounded-xl border ${isCaptain1 ? 'bg-team1/10 border-team1/30' : 'bg-bg-primary/50 border-border'}`}>
                              <div className="flex items-center justify-between">
-                                <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
+                                <h4 className="text-xs font-bold text-team1 uppercase tracking-wider flex items-center gap-2">
                                   <Swords size={14} />
                                   RCC Spartans
                                 </h4>
-                                <span className="text-[10px] font-mono font-bold bg-navy-950 px-2 py-0.5 rounded text-red-200">{team1Players.length}</span>
+                                <span className="text-[10px] font-mono font-bold bg-bg-tertiary px-2 py-0.5 rounded text-team1">{team1Players.length}</span>
                              </div>
                              <div className="flex flex-wrap gap-2 min-h-[50px]">
-                                {team1Players.length === 0 && <p className="text-navy-100/20 text-xs italic w-full text-center py-2">No players picked.</p>}
+                                {team1Players.length === 0 && <p className="text-text-tertiary text-xs italic w-full text-center py-2">No players picked.</p>}
                                 {team1Players.map(u => {
                                     const isCommon = u.id === commonPlayerId;
                                     const isCaptain = match.captain1Id === u.id;
                                     return (
-                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--color-accent) / 0.5)' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(239 68 68 / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--color-accent) / 0.1)' : isCommon ? 'rgb(168 85 247 / 0.1)' : 'rgb(239 68 68 / 0.1)' }}>
+                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--raw-accent) / 0.5)' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(var(--raw-team1) / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--raw-accent) / 0.1)' : isCommon ? 'rgb(168 85 247 / 0.1)' : 'rgb(var(--raw-team1) / 0.1)' }}>
                                        <div 
                                             onClick={(e) => {
                                                 if (!isAdmin) return;
@@ -963,21 +969,21 @@ export default function Dashboard({
                                                     handleSetCaptain(u.id, '1');
                                                 }
                                             }}
-                                            style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--color-accent))' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(239 68 68 / 0.2)', color: isCaptain ? 'white' : isCommon ? 'rgb(192 132 250)' : 'rgb(248 113 113)', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
+                                            style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--raw-accent))' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(var(--raw-team1) / 0.2)', color: isCaptain ? 'white' : isCommon ? 'rgb(192 132 250)' : 'rgb(var(--raw-team1))', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
                                             title={isAdmin ? (match.captain1Id === u.id ? "Switch to Blue Captain" : "Promote to Red Captain") : ""}
                                        >
                                          {match.captain1Id === u.id ? 'C1' : u.name.charAt(0)}
                                        </div>
-                                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isCaptain ? 'rgb(var(--color-accent))' : isCommon ? 'rgb(192 132 250)' : 'rgb(248 113 113)' }}>
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isCaptain ? 'rgb(var(--raw-accent))' : isCommon ? 'rgb(192 132 250)' : 'rgb(var(--raw-team1))' }}>
                                            {u.displayName || u.name}
                                            {isCommon && <span className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 px-1 rounded uppercase">Common</span>}
                                        </span>
-                                       {u.guests > 0 && <span className={`ml-1 text-[10px] px-1.5 rounded-full font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'}`}>+{u.guests}</span>}
+                                       {u.guests > 0 && <span className={`ml-1 text-[10px] px-1.5 rounded-full font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-team1/20 text-team1'}`}>+{u.guests}</span>}
                                        
                                        {canPickTeam1 && u.id !== match.captain1Id && !isCommon && (
                                            <button 
                                              onClick={() => handleRemovePlayer(u.id, 'team1')}
-                                             className="ml-auto w-5 h-5 rounded flex items-center justify-center text-navy-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                             className="ml-auto w-5 h-5 rounded flex items-center justify-center text-text-tertiary hover:text-error hover:bg-error/10 transition-colors"
                                            >
                                              <Minus size={12} />
                                            </button>
@@ -988,21 +994,21 @@ export default function Dashboard({
                           </div>
 
                           {/* Team 2: Warriors */}
-                          <div className={`space-y-3 p-4 rounded-xl border ${isCaptain2 ? 'bg-blue-900/10 border-blue-500/30' : 'bg-navy-900/50 border-navy-800'}`}>
+                          <div className={`space-y-3 p-4 rounded-xl border ${isCaptain2 ? 'bg-team2/10 border-team2/30' : 'bg-bg-primary/50 border-border'}`}>
                              <div className="flex items-center justify-between">
-                                <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                                <h4 className="text-xs font-bold text-team2 uppercase tracking-wider flex items-center gap-2">
                                   <Shield size={14} />
                                   RCC Warriors
                                 </h4>
-                                <span className="text-[10px] font-mono font-bold bg-navy-950 px-2 py-0.5 rounded text-blue-200">{team2Players.length}</span>
+                                <span className="text-[10px] font-mono font-bold bg-bg-tertiary px-2 py-0.5 rounded text-team2">{team2Players.length}</span>
                              </div>
                              <div className="flex flex-wrap gap-2 min-h-[50px]">
-                                {team2Players.length === 0 && <p className="text-navy-100/20 text-xs italic w-full text-center py-2">No players picked.</p>}
+                                {team2Players.length === 0 && <p className="text-text-tertiary text-xs italic w-full text-center py-2">No players picked.</p>}
                                 {team2Players.map(u => {
                                     const isCommon = u.id === commonPlayerId;
                                     const isCaptain = match.captain2Id === u.id;
                                     return (
-                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--color-accent) / 0.5)' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(59 130 246 / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--color-accent) / 0.1)' : isCommon ? 'rgb(168 85 247 / 0.1)' : 'rgb(59 130 246 / 0.1)' }}>
+                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--raw-accent) / 0.5)' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(var(--raw-team2) / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--raw-accent) / 0.1)' : isCommon ? 'rgb(168 85 247 / 0.1)' : 'rgb(var(--raw-team2) / 0.1)' }}>
                                        <div 
                                             onClick={(e) => {
                                                 if (!isAdmin) return;
@@ -1013,21 +1019,21 @@ export default function Dashboard({
                                                     handleSetCaptain(u.id, '2');
                                                 }
                                             }}
-                                            style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--color-accent))' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(59 130 246 / 0.2)', color: isCaptain ? 'white' : isCommon ? 'rgb(192 132 250)' : 'rgb(96 165 250)', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
+                                            style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--raw-accent))' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(var(--raw-team2) / 0.2)', color: isCaptain ? 'white' : isCommon ? 'rgb(192 132 250)' : 'rgb(var(--raw-team2))', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
                                             title={isAdmin ? (match.captain2Id === u.id ? "Unassign Captain" : "Promote to Blue Captain") : ""}
                                        >
                                          {match.captain2Id === u.id ? 'C2' : u.name.charAt(0)}
                                        </div>
-                                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isCaptain ? 'rgb(var(--color-accent))' : isCommon ? 'rgb(192 132 250)' : 'rgb(96 165 250)' }}>
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isCaptain ? 'rgb(var(--raw-accent))' : isCommon ? 'rgb(192 132 250)' : 'rgb(var(--raw-team2))' }}>
                                            {u.displayName || u.name}
                                            {isCommon && <span className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 px-1 rounded uppercase">Common</span>}
                                        </span>
-                                       {u.guests > 0 && <span className={`ml-1 text-[10px] px-1.5 rounded-full font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>+{u.guests}</span>}
+                                       {u.guests > 0 && <span className={`ml-1 text-[10px] px-1.5 rounded-full font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-team2/20 text-team2'}`}>+{u.guests}</span>}
                                        
                                        {canPickTeam2 && u.id !== match.captain2Id && !isCommon && (
                                            <button 
                                              onClick={() => handleRemovePlayer(u.id, 'team2')}
-                                             className="ml-auto w-5 h-5 rounded flex items-center justify-center text-navy-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                                             className="ml-auto w-5 h-5 rounded flex items-center justify-center text-text-tertiary hover:text-team2 hover:bg-team2/10 transition-colors"
                                            >
                                              <Minus size={12} />
                                            </button>
@@ -1042,22 +1048,22 @@ export default function Dashboard({
                   {/* Available / Pool (Members) */}
                   <div className="bg-bg-secondary border border-border rounded-lg p-4 space-y-3 mb-6">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                      <h4 className="text-xs font-bold text-success uppercase tracking-wider flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success" />
                         Available Pool
                       </h4>
-                      <span className="text-[10px] font-mono font-bold bg-navy-800 px-2 py-0.5 rounded text-navy-100/50">{unpickedMembers.length}</span>
+                      <span className="text-[10px] font-mono font-bold bg-bg-tertiary px-2 py-0.5 rounded text-text-tertiary">{unpickedMembers.length}</span>
                     </div>
                     
                     <div className="flex flex-wrap gap-2">
-                      {unpickedMembers.length === 0 && <p className="text-navy-100/20 text-xs italic px-2">No available members.</p>}
+                      {unpickedMembers.length === 0 && <p className="text-text-tertiary text-xs italic px-2">No available members.</p>}
                       {unpickedMembers.map(u => {
                         const isC1 = match?.captain1Id === u.id;
                         const isC2 = match?.captain2Id === u.id;
                         const isCaptain = isC1 || isC2;
                         
                         return (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--color-accent) / 0.5)' : 'rgb(34 197 94 / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--color-accent) / 0.1)' : 'rgb(34 197 94 / 0.1)', transition: 'all 0.2s' }}>
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--raw-accent) / 0.5)' : 'rgb(var(--raw-success) / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--raw-accent) / 0.1)' : 'rgb(var(--raw-success) / 0.1)', transition: 'all 0.2s' }}>
                            {/* Avatar / Captain Cycle */}
                            <div 
                                onClick={(e) => {
@@ -1067,24 +1073,24 @@ export default function Dashboard({
                                    else if (isC2) handleSetCaptain(u.id, null); // Blue -> None
                                    else handleSetCaptain(u.id, '1'); // None -> Red
                                }}
-                               style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--color-accent))' : 'rgb(34 197 94 / 0.2)', color: isCaptain ? 'white' : 'rgb(74 222 128)', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
+                               style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--raw-accent))' : 'rgb(var(--raw-success) / 0.2)', color: isCaptain ? 'white' : 'rgb(var(--raw-success))', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
                                title={isAdmin ? "Click to cycle: Red Captain -> Blue Captain -> None" : ""}
                            >
                              {isC1 ? 'C1' : isC2 ? 'C2' : u.name.charAt(0)}
                            </div>
                            
-                           <span style={{ fontSize: '0.75rem', fontWeight: 500, color: isCaptain ? 'rgb(var(--color-accent))' : 'rgb(var(--color-text-primary))' }}>{u.name}</span>
+                           <span style={{ fontSize: '0.75rem', fontWeight: 500, color: isCaptain ? 'rgb(var(--raw-accent))' : 'rgb(var(--raw-text-primary))' }}>{u.name}</span>
                            {u.guests > 0 && (
-                             <span className="ml-1 text-[10px] bg-green-500/20 text-green-400 px-1.5 rounded-full font-bold">+{u.guests}</span>
+                             <span className="ml-1 text-[10px] bg-success/20 text-success px-1.5 rounded-full font-bold">+{u.guests}</span>
                            )}
 
                            {/* Captain Picking Actions */}
                            {(canPickTeam1 || canPickTeam2) && !isC1 && !isC2 && (
-                               <div className="flex ml-2 gap-1 pl-2 border-l border-navy-700/50">
+                               <div className="flex ml-2 gap-1 pl-2 border-l border-border/50">
                                    {canPickTeam1 && (
                                        <button 
                                          onClick={() => handlePickPlayer(u.id, 'team1')}
-                                         className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                                         className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-error/20 text-error hover:bg-error hover:text-white transition-colors"
                                          title="Add to Spartans"
                                        >
                                          <Plus size={12} />
@@ -1093,7 +1099,7 @@ export default function Dashboard({
                                    {canPickTeam2 && (
                                        <button 
                                          onClick={() => handlePickPlayer(u.id, 'team2')}
-                                         className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-colors"
+                                         className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-team2/20 text-team2 hover:bg-team2 hover:text-white transition-colors"
                                          title="Add to Warriors"
                                        >
                                          <Plus size={12} />
@@ -1110,25 +1116,25 @@ export default function Dashboard({
                   {unpickedGuests.length > 0 && (
                       <div className="bg-bg-secondary border border-border rounded-lg p-4 space-y-3 mb-6">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
-                             <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+                          <h4 className="text-xs font-bold text-accent uppercase tracking-wider flex items-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-accent" />
                              Guest Pool
                           </h4>
-                          <span className="text-[10px] font-mono font-bold bg-navy-800 px-2 py-0.5 rounded text-navy-100/50">{unpickedGuests.length}</span>
+                          <span className="text-[10px] font-mono font-bold bg-bg-tertiary px-2 py-0.5 rounded text-text-tertiary">{unpickedGuests.length}</span>
                         </div>
                         
                         <div className="flex flex-wrap gap-2">
                            {unpickedGuests.map(u => (
-                             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-teal-500/10 border-teal-500/20">
-                                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-teal-500/20 text-teal-400">G</div>
-                                <span className="text-xs font-medium text-teal-400">{u.displayName || u.name}</span>
+                             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-accent/10 border-accent/20">
+                                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-accent/20 text-accent">G</div>
+                                <span className="text-xs font-medium text-accent">{u.displayName || u.name}</span>
                                 
                                 {(canPickTeam1 || canPickTeam2) && (
-                                   <div className="flex ml-2 gap-1 pl-2 border-l border-navy-700/50">
+                                   <div className="flex ml-2 gap-1 pl-2 border-l border-border/50">
                                        {canPickTeam1 && (
                                            <button 
                                              onClick={() => handlePickPlayer(u.id, 'team1')}
-                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-error/20 text-error hover:bg-error hover:text-white transition-colors"
                                              title="Add to Spartans"
                                            >
                                              <Plus size={12} />
@@ -1137,7 +1143,7 @@ export default function Dashboard({
                                        {canPickTeam2 && (
                                            <button 
                                              onClick={() => handlePickPlayer(u.id, 'team2')}
-                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-colors"
+                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-team2/20 text-team2 hover:bg-team2 hover:text-white transition-colors"
                                              title="Add to Warriors"
                                            >
                                              <Plus size={12} />
@@ -1156,36 +1162,36 @@ export default function Dashboard({
                       <div className="bg-bg-secondary border border-border rounded-lg p-4 mb-6">
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                           <h4 className="text-xs font-bold text-warning uppercase tracking-wider flex items-center gap-2">
-                            <Clock size={16} style={{ color: 'rgb(var(--color-waiting-brown))' }} />
+                            <Clock size={16} />
                             Waiting List
                           </h4>
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded">{waitListPlayers.length}</span>
+                          <span className="text-[10px] font-mono font-bold bg-bg-tertiary text-text-tertiary px-2 py-0.5 rounded">{waitListPlayers.length}</span>
                         </div>
                         
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                           {waitListPlayers.map((u, i) => (
-                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: 'rgb(var(--color-waiting-light) / 0.2)', border: `1px solid rgb(var(--color-waiting-brown))` }}>
-                               <Clock size={14} style={{ color: 'rgb(var(--color-waiting-brown))' }} />
-                               <span className="text-xs font-bold" style={{ color: 'rgb(var(--color-waiting-brown))' }}>{u.displayName || u.name}</span>
+                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-warning/10 border-warning/20">
+                               <Clock size={14} className="text-warning" />
+                               <span className="text-xs font-bold text-warning">{u.displayName || u.name}</span>
 
                                {(canPickTeam1 || canPickTeam2) && (
-                                   <div style={{ display: 'flex', marginLeft: '0.5rem', gap: '0.25rem', paddingLeft: '0.5rem', borderLeft: '1px solid #d1d5db' }}>
+                                   <div className="flex ml-2 gap-1 pl-2 border-l border-border/50">
                                        {canPickTeam1 && (
                                            <button 
                                              onClick={() => handlePickPlayer(u.id, 'team1')}
-                                             style={{ width: '1.5rem', height: '1.5rem', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}
+                                             className="w-6 h-6 rounded flex items-center justify-center font-bold bg-error/20 text-error hover:bg-error hover:text-white transition-colors"
                                              title="Add to Spartans"
                                            >
-                                             <Plus size={16} />
+                                             <Plus size={14} />
                                            </button>
                                        )}
                                        {canPickTeam2 && (
                                            <button 
                                              onClick={() => handlePickPlayer(u.id, 'team2')}
-                                             style={{ width: '1.5rem', height: '1.5rem', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}
+                                             className="w-6 h-6 rounded flex items-center justify-center font-bold bg-team2/20 text-team2 hover:bg-team2 hover:text-white transition-colors"
                                              title="Add to Warriors"
                                            >
-                                             <Plus size={16} />
+                                             <Plus size={14} />
                                            </button>
                                        )}
                                    </div>
@@ -1201,16 +1207,16 @@ export default function Dashboard({
                   <div className="bg-bg-secondary border border-border rounded-lg p-4 mb-6">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <h4 className="text-xs font-bold text-coffee uppercase tracking-wider flex items-center gap-2">
-                        <Coffee size={16} style={{ color: 'rgb(var(--color-coffee))' }} />
+                        <Coffee size={16} />
                         Bringing Coffee
                       </h4>
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded">{availability.coffee.length}</span>
+                      <span className="text-[10px] font-mono font-bold bg-bg-tertiary text-text-tertiary px-2 py-0.5 rounded">{availability.coffee.length}</span>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                       {availability.coffee.map(u => (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: 'rgb(var(--color-coffee-light) / 0.2)', border: `1px solid rgb(var(--color-coffee))` }}>
-                           <Coffee size={14} style={{ color: 'rgb(var(--color-coffee))' }} />
-                           <span className="text-xs font-bold" style={{ color: 'rgb(var(--color-coffee))' }}>{u.name}</span>
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-coffee/10 border-coffee/20">
+                           <Coffee size={14} className="text-coffee" />
+                           <span className="text-xs font-bold text-coffee">{u.name}</span>
                         </motion.div>
                       ))}
                     </div>
@@ -1220,18 +1226,18 @@ export default function Dashboard({
                   {/* OUT */}
                   <div className="bg-bg-secondary border border-border rounded-lg p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                      <h4 className="text-xs font-bold text-error uppercase tracking-wider flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-error" />
                         Unavailable
                       </h4>
-                      <span className="text-[10px] font-mono font-bold bg-navy-800 px-2 py-0.5 rounded text-navy-100/50">{availability.out.length}</span>
+                      <span className="text-[10px] font-mono font-bold bg-bg-tertiary px-2 py-0.5 rounded text-text-tertiary">{availability.out.length}</span>
                     </div>
                     
                     <div className="flex flex-wrap gap-2">
-                      {availability.out.length === 0 && <p className="text-navy-100/20 text-xs italic px-2">List is empty.</p>}
+                      {availability.out.length === 0 && <p className="text-text-tertiary text-xs italic px-2">List is empty.</p>}
                       {availability.out.map(u => (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 bg-red-500/5 border border-red-500/10 rounded-lg opacity-60 hover:opacity-100 transition-opacity cursor-default">
-                           <span className="text-xs text-red-200 line-through decoration-red-500/50">{u.name}</span>
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 bg-error/5 border border-error/10 rounded-lg opacity-60 hover:opacity-100 transition-opacity cursor-default">
+                           <span className="text-xs text-text-primary line-through decoration-error/50">{u.name}</span>
                         </motion.div>
                       ))}
                     </div>
@@ -1244,13 +1250,13 @@ export default function Dashboard({
                 key="empty"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="bg-navy-900/30 rounded-[2rem] p-10 text-center border-2 border-navy-800 border-dashed"
+                className="bg-bg-secondary/30 rounded-[2rem] p-10 text-center border-2 border-border border-dashed"
               >
-                <div className="w-16 h-16 bg-navy-800/50 rounded-full flex items-center justify-center mx-auto mb-4 border border-navy-700/50">
-                  <ChevronRight className="text-navy-100/20" />
+                <div className="w-16 h-16 bg-bg-tertiary/50 rounded-full flex items-center justify-center mx-auto mb-4 border border-border/50">
+                  <ChevronRight className="text-text-tertiary" />
                 </div>
-                <h3 className="text-white font-medium mb-1">Select a Weekend</h3>
-                <p className="text-navy-100/50 text-sm">Pick a date from the calendar to view the roster and set your status.</p>
+                <h3 className="text-text-primary font-medium mb-1">Select a Weekend</h3>
+                <p className="text-text-secondary text-sm">Pick a date from the calendar to view the roster and set your status.</p>
               </motion.div>
             )}
           </AnimatePresence>

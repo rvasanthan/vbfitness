@@ -32,36 +32,36 @@ export default function GuestNameModal({ isOpen, onClose, onSubmit, count, curre
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-navy-900 w-full max-w-md rounded-2xl border border-navy-800 shadow-xl overflow-hidden"
+        className="bg-bg-secondary w-full max-w-md rounded-2xl border border-border shadow-xl overflow-hidden"
       >
-        <div className="p-4 border-b border-navy-800 flex items-center justify-between bg-navy-950/50">
-           <h3 className="font-bold text-navy-100 flex items-center gap-2">
-             <UserPlus className="text-cricket-gold" size={20} />
+        <div className="p-4 border-b border-border flex items-center justify-between bg-bg-primary/50">
+           <h3 className="font-bold text-text-primary flex items-center gap-2">
+             <UserPlus className="text-accent" size={20} />
              Guest Details
            </h3>
-           <button onClick={onClose} className="text-navy-100/50 hover:text-red-400 transition-colors">
+           <button onClick={onClose} className="text-text-tertiary hover:text-error transition-colors">
              <X size={20} />
            </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
            <div className="space-y-3">
-             <p className="text-sm text-navy-100/60 mb-2">Please enter the names of your {count} guest{count > 1 ? 's' : ''}:</p>
+             <p className="text-sm text-text-secondary mb-2">Please enter the names of your {count} guest{count > 1 ? 's' : ''}:</p>
              {names.map((name, i) => (
                 <div key={i} className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-navy-100/50 uppercase tracking-wider">Guest {i+1}</label>
+                  <label className="text-xs font-bold text-text-tertiary uppercase tracking-wider">Guest {i+1}</label>
                   <input 
                     type="text" 
                     value={name}
                     onChange={(e) => handleChange(i, e.target.value)}
                     placeholder={`Enter name for guest ${i+1}`}
                     autoFocus={i === 0}
-                    className="w-full bg-navy-950 border border-navy-800 rounded-lg px-4 py-3 text-navy-100 placeholder:text-navy-800 focus:outline-none focus:border-cricket-gold/50 focus:ring-1 focus:ring-cricket-gold/50 transition-all font-medium"
+                    className="w-full bg-bg-primary border border-border rounded-lg px-4 py-3 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all font-medium"
                   />
                 </div>
              ))}
@@ -70,7 +70,7 @@ export default function GuestNameModal({ isOpen, onClose, onSubmit, count, curre
            <div className="pt-2">
              <button 
                type="submit"
-               className="w-full py-3 bg-cricket-gold text-navy-900 font-bold rounded-xl hover:bg-yellow-500 transition-colors tracking-wide"
+               className="w-full py-3 bg-accent text-white font-bold rounded-xl hover:opacity-90 transition-opacity tracking-wide"
              >
                Confirm & Join
              </button>

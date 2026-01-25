@@ -27,6 +27,7 @@ import { getSeasonWeekends, getHolidays } from './utils/dateHelpers';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import AdminPanel from './components/AdminPanel';
+import ScoringInterface from './components/ScoringInterface';
 import { ShieldAlert, Loader2, Lock } from 'lucide-react';
 
 // Initialize theme on app load
@@ -67,6 +68,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [access, setAccess] = useState('unknown'); // 'unknown' | 'approved' | 'pending' | 'suspended'
   const [showAdmin, setShowAdmin] = useState(false);
+  const [activeScoringMatch, setActiveScoringMatch] = useState(null);
 
   // Initialize theme on app mount
   useEffect(() => {
@@ -399,19 +401,19 @@ export default function App() {
   if (access === 'suspended' || access === 'deleted') {
     const isDeleted = access === 'deleted';
     return (
-      <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 border border-red-500/20">
-          <ShieldAlert className="w-10 h-10 text-red-500" />
+      <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-20 h-20 bg-error/10 rounded-full flex items-center justify-center mb-6 border border-error/20">
+          <ShieldAlert className="w-10 h-10 text-error" />
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">{isDeleted ? 'Account Removed' : 'Account Suspended'}</h1>
-        <p className="text-navy-100/50 mb-8 max-w-md">
+        <h1 className="text-2xl font-bold text-text-primary mb-2">{isDeleted ? 'Account Removed' : 'Account Suspended'}</h1>
+        <p className="text-text-secondary mb-8 max-w-md">
           {isDeleted 
             ? "Your account has been removed by an administrator. To join again, you must sign out and sign in to create a new request." 
             : "Your account has been suspended by an administrator. Please contact specific club admins to resolve this issue."}
         </p>
         <button 
           onClick={handleSignOut}
-          className="px-6 py-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition"
+          className="px-6 py-2 bg-bg-secondary text-text-primary rounded-lg hover:bg-bg-tertiary transition border border-border"
         >
           Sign Out
         </button>
@@ -421,20 +423,20 @@ export default function App() {
 
   if (access === 'pending') {
      return (
-        <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center p-6 text-center">
-           <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mb-6 border border-yellow-500/20 animate-pulse">
-              <Lock className="w-10 h-10 text-cricket-gold" />
+        <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-6 text-center">
+           <div className="w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center mb-6 border border-accent/20 animate-pulse">
+              <Lock className="w-10 h-10 text-accent" />
            </div>
-           <h1 className="text-2xl font-bold text-white mb-2">Pending Approval</h1>
-           <p className="text-navy-100/50 mb-8 max-w-md">Thanks for signing up! An administrator needs to approve your account before you can check in for practice.</p>
+           <h1 className="text-2xl font-bold text-text-primary mb-2">Pending Approval</h1>
+           <p className="text-text-secondary mb-8 max-w-md">Thanks for signing up! An administrator needs to approve your account before you can check in for practice.</p>
            <button 
               onClick={handleSignOut}
-              className="px-6 py-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition"
+              className="px-6 py-2 bg-bg-secondary text-text-primary rounded-lg hover:bg-bg-tertiary transition border border-border"
            >
               Sign Out
            </button>
-           <div className="mt-8 pt-8 border-t border-navy-800/50 w-full max-w-xs">
-              <p className="text-xs text-navy-100/30">User ID: <span className="font-mono">{currentUser?.uid}</span></p>
+           <div className="mt-8 pt-8 border-t border-border/50 w-full max-w-xs">
+              <p className="text-xs text-text-tertiary">User ID: <span className="font-mono">{currentUser?.uid}</span></p>
            </div>
         </div>
      );
@@ -449,6 +451,22 @@ export default function App() {
         statusMessage={statusMessage}
         user={currentUser}
         access={access}
+      />
+    );
+  }
+
+  // Scoring "Page" View - Replaces everything else
+  if (activeScoringMatch) {
+    return (
+      <ScoringInterface 
+        isOpen={true}
+        match={activeScoringMatch}
+        users={users}
+        onClose={() => setActiveScoringMatch(null)}
+        onUpdateLocal={(updatedMatch) => {
+            setActiveScoringMatch(updatedMatch); 
+            // Also need to refresh users list if needed, or if the dashboard data needs updating
+        }}
       />
     );
   }
@@ -473,6 +491,7 @@ export default function App() {
         isAdmin={currentUser.role === 'admin'}
         onOpenAdmin={() => setShowAdmin(true)}
         onRefresh={() => selectedDate && loadAvailability(selectedDate)}
+        setActiveScoringMatch={setActiveScoringMatch}
       />
       {showAdmin && (
          <AdminPanel 

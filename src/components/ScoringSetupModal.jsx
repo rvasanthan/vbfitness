@@ -74,19 +74,19 @@ export default function ScoringSetupModal({ isOpen, onClose, match, users, onSta
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-navy-900 w-full max-w-md rounded-2xl shadow-2xl border border-navy-800 overflow-hidden"
+        className="bg-bg-secondary w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden"
       >
-        <div className="px-6 py-4 border-b border-navy-800 bg-navy-950/50 flex justify-between items-center">
-          <h3 className="text-xl font-bold text-navy-100 flex items-center gap-2">
-            <Play className="text-green-500" size={20} />
+        <div className="px-6 py-4 border-b border-border bg-bg-primary/50 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-text-primary flex items-center gap-2">
+            <Play className="text-success" size={20} />
             Start Innings
           </h3>
-          <button onClick={onClose} className="p-2 hover:bg-navy-800 rounded-full text-navy-100/50 hover:text-navy-100 transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-bg-tertiary rounded-full text-text-tertiary hover:text-text-primary transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -95,18 +95,18 @@ export default function ScoringSetupModal({ isOpen, onClose, match, users, onSta
             
             {/* Batting Selection */}
             <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-navy-100/60 uppercase tracking-wider">
-                    <Shield size={14} className="text-cricket-gold" />
-                    Batting: <span className="text-white">{battingTeamName}</span>
+                <div className="flex items-center gap-2 text-sm font-bold text-text-tertiary uppercase tracking-wider">
+                    <Shield size={14} className="text-accent" />
+                    Batting: <span className="text-text-primary">{battingTeamName}</span>
                 </div>
                 
                 <div className="grid gap-4">
                     <div>
-                        <label className="block text-xs font-bold text-navy-100/40 mb-1.5 uppercase tracking-wider">Striker</label>
+                        <label className="block text-xs font-bold text-text-tertiary mb-1.5 uppercase tracking-wider">Striker</label>
                         <select 
                             value={striker}
                             onChange={(e) => setStriker(e.target.value)}
-                            className="w-full p-3 bg-navy-950 rounded-xl border border-navy-800 text-navy-100 focus:border-green-500 focus:outline-none transition-colors appearance-none"
+                            className="w-full p-3 bg-bg-primary rounded-xl border border-border text-text-primary focus:border-accent focus:outline-none transition-colors appearance-none"
                         >
                             <option value="">Select Striker</option>
                             {battingPlayers.map(p => (
@@ -116,11 +116,11 @@ export default function ScoringSetupModal({ isOpen, onClose, match, users, onSta
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-navy-100/40 mb-1.5 uppercase tracking-wider">Non-Striker</label>
+                        <label className="block text-xs font-bold text-text-tertiary mb-1.5 uppercase tracking-wider">Non-Striker</label>
                         <select 
                             value={nonStriker}
                             onChange={(e) => setNonStriker(e.target.value)}
-                            className="w-full p-3 bg-navy-950 rounded-xl border border-navy-800 text-navy-100 focus:border-green-500 focus:outline-none transition-colors appearance-none"
+                            className="w-full p-3 bg-bg-primary rounded-xl border border-border text-text-primary focus:border-accent focus:outline-none transition-colors appearance-none"
                         >
                             <option value="">Select Non-Striker</option>
                             {battingPlayers.map(p => (
@@ -131,20 +131,20 @@ export default function ScoringSetupModal({ isOpen, onClose, match, users, onSta
                 </div>
             </div>
 
-            <div className="h-px bg-navy-800" />
+            <div className="h-px bg-border" />
 
             {/* Bowling Selection */}
             <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-navy-100/60 uppercase tracking-wider">
-                    <User size={14} className="text-indigo-400" />
-                    Opening Bowler: <span className="text-white">{bowlingTeamName}</span>
+                <div className="flex items-center gap-2 text-sm font-bold text-text-tertiary uppercase tracking-wider">
+                    <User size={14} className="text-accent" />
+                    Opening Bowler: <span className="text-text-primary">{bowlingTeamName}</span>
                 </div>
                 
                 <div>
                      <select 
                         value={bowler}
                         onChange={(e) => setBowler(e.target.value)}
-                        className="w-full p-3 bg-navy-950 rounded-xl border border-navy-800 text-navy-100 focus:border-green-500 focus:outline-none transition-colors appearance-none"
+                        className="w-full p-3 bg-bg-primary rounded-xl border border-border text-text-primary focus:border-accent focus:outline-none transition-colors appearance-none"
                     >
                         <option value="">Select Bowler</option>
                         {bowlingPlayers.map(p => (
@@ -157,7 +157,7 @@ export default function ScoringSetupModal({ isOpen, onClose, match, users, onSta
             <button
                 disabled={!striker || !nonStriker || !bowler || isSubmitting}
                 onClick={handleSubmit}
-                className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
+                className="w-full py-4 bg-accent text-white rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-accent/20 flex items-center justify-center gap-2"
             >
                 {isSubmitting ? 'Starting...' : 'Start Scoring'}
             </button>

@@ -97,7 +97,7 @@ export default function AuthPage({
         )}
       </motion.div>
       
-      <p className="fixed bottom-6 text-navy-100/20 text-xs font-medium tracking-wide">© {new Date().getFullYear()} RCC • EST 1990</p>
+      <p className="fixed bottom-6 text-text-tertiary text-xs font-medium tracking-wide">© {new Date().getFullYear()} RCC • EST 1990</p>
     </div>
   );
 }

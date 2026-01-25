@@ -195,7 +195,7 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-navy-100/50">
+      <div className="flex flex-col items-center justify-center h-64 text-text-tertiary">
         <Loader2 className="w-8 h-8 animate-spin mb-2" />
         <p>Loading roster data...</p>
       </div>
@@ -203,21 +203,21 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
   }
 
   return (
-    <div className="bg-navy-900 border border-navy-800/50 rounded-2xl overflow-hidden shadow-xl">
+    <div className="bg-bg-secondary border border-border rounded-2xl overflow-hidden shadow-xl">
       <div className="overflow-x-auto">
         <div className="inline-block min-w-full align-middle">
-          <table className="min-w-full divide-y divide-navy-800">
+          <table className="min-w-full divide-y divide-border">
             <thead>
-              <tr className="bg-navy-950 shadow-sm z-30">
-                <th scope="col" className="sticky top-0 left-0 z-40 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-navy-100 bg-navy-950 border-r border-navy-800 min-w-[200px] h-20 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
+              <tr className="bg-bg-primary shadow-sm z-30">
+                <th scope="col" className="sticky top-0 left-0 z-40 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-text-primary bg-bg-primary border-r border-border min-w-[200px] h-20 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                   <div>Player</div>
-                  <div className="text-[10px] text-navy-100/40 font-normal uppercase tracking-wider mt-1">Status</div>
+                  <div className="text-[10px] text-text-tertiary font-normal uppercase tracking-wider mt-1">Status</div>
                 </th>
                 {dates.map(date => {
                   const d = parseLocalDate(date);
                   const isPast = new Date(date) < new Date().setHours(0,0,0,0);
                   return (
-                    <th key={date} scope="col" className={`sticky top-0 z-30 px-2 py-3 text-center text-xs font-semibold min-w-[60px] h-20 bg-navy-950 ${isPast ? 'text-navy-100/30' : 'text-navy-100'}`}>
+                    <th key={date} scope="col" className={`sticky top-0 z-30 px-2 py-3 text-center text-xs font-semibold min-w-[60px] h-20 bg-bg-primary ${isPast ? 'text-text-tertiary' : 'text-text-primary'}`}>
                       <div className="flex flex-col items-center justify-between h-full">
                          <div className="flex flex-col items-center">
                             <span className="uppercase text-[10px] tracking-wider mb-0.5 opacity-70">{d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
@@ -227,11 +227,11 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
                          
                          {/* Integrated Stats in Header */}
                          <div className="flex items-center gap-1 mt-2 text-[10px] font-mono leading-none">
-                            <span className={`${statsByDate[date].in > 0 ? 'text-green-400 font-bold' : 'text-navy-100/20'}`}>
+                            <span className={`${statsByDate[date].in > 0 ? 'text-success font-bold' : 'text-text-tertiary/20'}`}>
                               {statsByDate[date].in}
                             </span>
-                            <span className="text-navy-100/20">/</span>
-                            <span className={`${statsByDate[date].out > 0 ? 'text-red-400' : 'text-navy-100/20'}`}>
+                            <span className="text-text-tertiary/20">/</span>
+                            <span className={`${statsByDate[date].out > 0 ? 'text-error' : 'text-text-tertiary/20'}`}>
                               {statsByDate[date].out}
                             </span>
                          </div>
@@ -241,12 +241,12 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
                 })}
               </tr>
             </thead>
-            <tbody className="divide-y divide-navy-800/50 bg-navy-900/50">
+            <tbody className="divide-y divide-border bg-bg-secondary/50">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-navy-800/30 transition-colors">
-                  <td className="sticky left-0 z-10 whitespace-nowrap py-3 pl-4 pr-3 text-sm font-medium text-navy-100 bg-navy-900 border-r border-navy-800">
+                <tr key={user.id} className="hover:bg-bg-tertiary/30 transition-colors">
+                  <td className="sticky left-0 z-10 whitespace-nowrap py-3 pl-4 pr-3 text-sm font-medium text-text-primary bg-bg-secondary border-r border-border">
                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-full bg-navy-800 flex items-center justify-center text-[10px] text-navy-100/70">
+                       <div className="w-6 h-6 rounded-full bg-bg-tertiary flex items-center justify-center text-[10px] text-text-tertiary">
                          {user.name.charAt(0)}
                        </div>
                        {user.name}
@@ -267,27 +267,27 @@ export default function ConsolidatedRoster({ year, dates, users, isAdmin }) {
                       <td 
                         key={date} 
                         onClick={() => handleToggleStatus(user, date, status)}
-                        className={`whitespace-nowrap px-2 py-3 text-center transition-colors ${isAdmin ? 'cursor-pointer hover:bg-navy-800/50' : ''} ${isC1 || isC2 ? 'bg-cricket-gold/5' : ''}`}
+                        className={`whitespace-nowrap px-2 py-3 text-center transition-colors ${isAdmin ? 'cursor-pointer hover:bg-bg-tertiary/50' : ''} ${isC1 || isC2 ? 'bg-accent/5' : ''}`}
                         title={isAdmin ? "Click to toggle availability" : ""}
                       >
                         <div className={`flex flex-col items-center justify-center ${isProcessing ? 'opacity-50 scale-90' : ''}`}>
                           {status === 'in' ? (
                             <div className="flex items-center justify-center relative">
                                 <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${
-                                    isC1 || isC2 ? 'bg-cricket-gold text-navy-900 shadow-md ring-1 ring-cricket-gold' 
-                                    : isWaitlisted ? 'bg-amber-500/20 text-amber-500' // Amber for Waitlist
-                                    : 'bg-green-500/20 text-green-400'
+                                    isC1 || isC2 ? 'bg-accent text-white shadow-md ring-1 ring-accent' 
+                                    : isWaitlisted ? 'bg-waiting/20 text-waiting' // Amber for Waitlist
+                                    : 'bg-success/20 text-success'
                                 }`}>
                                   {isC1 ? <span className="text-[10px] font-bold">C1</span> : isC2 ? <span className="text-[10px] font-bold">C2</span> : <Check size={14} strokeWidth={3} />}
                                 </span>
-                                {guests > 0 && <span className={`ml-1 text-[10px] font-bold ${isWaitlisted ? 'text-amber-500' : 'text-green-400'}`}>+{guests}</span>}
+                                {guests > 0 && <span className={`ml-1 text-[10px] font-bold ${isWaitlisted ? 'text-waiting' : 'text-success'}`}>+{guests}</span>}
                             </div>
                           ) : status === 'out' ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500/10 text-red-500/50">
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-error/10 text-error/50">
                               <X size={14} strokeWidth={3} />
                             </span>
                           ) : (
-                            <span className="inline-flex items-center justify-center w-6 h-6 text-navy-800">
+                            <span className="inline-flex items-center justify-center w-6 h-6 text-text-tertiary">
                               <Minus size={14} />
                             </span>
                           )}
