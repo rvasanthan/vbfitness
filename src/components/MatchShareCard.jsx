@@ -2,7 +2,18 @@ import React from 'react';
 import { Swords } from 'lucide-react';
 
 const MatchShareCard = React.forwardRef(({ team1, team2, matchDetails }, ref) => {
-  if (!matchDetails) return null;
+
+    if (!matchDetails) return null;
+
+    // Find coffee bringer (assuming matchDetails.coffeeBringer or matchDetails.coffee, or fallback to team1/team2 with bringsCoffee)
+    let coffeeBringer = null;
+    if (matchDetails.coffee && Array.isArray(matchDetails.coffee) && matchDetails.coffee.length > 0) {
+        coffeeBringer = matchDetails.coffee[0];
+    } else {
+        // Try to find in team1/team2
+        const coffeePlayer = [...(team1 || []), ...(team2 || [])].find(p => p.bringsCoffee);
+        if (coffeePlayer) coffeeBringer = coffeePlayer.name;
+    }
 
   // Manual Color Palette 
   const colors = {
@@ -24,18 +35,36 @@ const MatchShareCard = React.forwardRef(({ team1, team2, matchDetails }, ref) =>
 
   // Pure inline styles - bypassing ALL Tailwind classes to avoid OKLCH variables
   return (
-    <div 
-        ref={ref} 
-        style={{ 
-            backgroundColor: colors.bg, 
-            fontFamily: 'sans-serif',
-            color: '#ffffff',
-            padding: '2rem',
-            width: '800px',
-            position: 'relative',
-            overflow: 'hidden'
-        }}
-    >
+        <div 
+                ref={ref} 
+                style={{ 
+                        backgroundColor: colors.bg, 
+                        fontFamily: 'sans-serif',
+                        color: '#ffffff',
+                        padding: '2rem',
+                        width: '800px',
+                        position: 'relative',
+                        overflow: 'hidden'
+                }}
+        >
+                {/* Coffee Bringer Banner */}
+                {coffeeBringer && (
+                    <div style={{
+                        position: 'absolute',
+                        top: 16,
+                        right: 24,
+                        background: '#f59e0b',
+                        color: '#1e293b',
+                        padding: '0.5rem 1.25rem',
+                        borderRadius: '9999px',
+                        fontWeight: 700,
+                        fontSize: '1rem',
+                        zIndex: 30,
+                        boxShadow: '0 2px 8px 0 rgba(0,0,0,0.08)'
+                    }}>
+                        ☕ {typeof coffeeBringer === 'string' ? coffeeBringer : (coffeeBringer.name || 'Bringing Coffee!')} is bringing coffee
+                    </div>
+                )}
         {/* Background Stripe */}
         <div style={{ 
             position: 'absolute', top: 0, left: 0, width: '100%', height: '8px',

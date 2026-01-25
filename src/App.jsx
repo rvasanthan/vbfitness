@@ -29,6 +29,29 @@ import Dashboard from './pages/Dashboard';
 import AdminPanel from './components/AdminPanel';
 import { ShieldAlert, Loader2, Lock } from 'lucide-react';
 
+// Initialize theme on app load
+function initializeTheme() {
+  const stored = localStorage.getItem('theme');
+  
+  if (stored) {
+    applyTheme(stored);
+  } else {
+    // Respect system preference
+    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const systemTheme = dark ? 'dark' : 'light';
+    applyTheme(systemTheme);
+  }
+}
+
+function applyTheme(theme) {
+  const html = document.documentElement;
+  if (theme === 'dark') {
+    html.setAttribute('data-theme', 'dark');
+  } else {
+    html.removeAttribute('data-theme');
+  }
+}
+
 export default function App() {
   const today = new Date();
   const initialYear = today.getFullYear();
@@ -44,6 +67,11 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [access, setAccess] = useState('unknown'); // 'unknown' | 'approved' | 'pending' | 'suspended'
   const [showAdmin, setShowAdmin] = useState(false);
+
+  // Initialize theme on app mount
+  useEffect(() => {
+    initializeTheme();
+  }, []);
 
   const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 
@@ -195,39 +223,34 @@ export default function App() {
       const snapshot = await getDocs(q);
       const inList = [];
       const outList = [];
+      const coffeeList = [];
       for (const docSnap of snapshot.docs) {
         const data = docSnap.data();
-        // Skip users not found in valid user list (cleaned up/zombie records)
-        // If users list is not loaded yet, this might temp hide everyone, but useEffect will re-run when users load.
-        if (!usersById[data.user_id]) continue; 
-
+        if (!usersById[data.user_id]) continue;
         const userInfo = usersById[data.user_id];
-        
-        // Get timestamp for ordering (FIFO)
         let ts = 0;
         if (data.created_at && typeof data.created_at.toMillis === 'function') {
-            ts = data.created_at.toMillis();
-        } else if (data.created_at) { 
-            ts = new Date(data.created_at).getTime();
+          ts = data.created_at.toMillis();
+        } else if (data.created_at) {
+          ts = new Date(data.created_at).getTime();
         }
-        
-        const entry = { 
-            ...userInfo, 
-            guests: data.guests || 0, 
-            guestNames: data.guestNames || [],
-            joinedAt: ts 
+        const entry = {
+          ...userInfo,
+          guests: data.guests || 0,
+          guestNames: data.guestNames || [],
+          bringsCoffee: data.bringsCoffee || false,
+          joinedAt: ts
         };
         if (data.status === 'in') inList.push(entry);
         else outList.push(entry);
+        if (data.bringsCoffee) coffeeList.push(entry);
       }
-      
-      // Sort by joinedAt (First In, First Served)
       inList.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-
-      setAvailability({ in: inList, out: outList });
+      coffeeList.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+      setAvailability({ in: inList, out: outList, coffee: coffeeList });
     } catch (err) {
       console.error(err);
-      setAvailability({ in: [], out: [] });
+      setAvailability({ in: [], out: [], coffee: [] });
     }
   }
 
@@ -274,18 +297,16 @@ export default function App() {
     if (!currentUser || !selectedDate) return;
     setLoading(true);
     setStatusMessage('');
-    
+
     // Parse input: guestsOrDetails can be Number or Array of names
     let guestCount = 0;
     let guestNames = [];
-    
+
     if (Array.isArray(guestsOrDetails)) {
-        guestNames = guestsOrDetails;
-        guestCount = guestsOrDetails.length;
+      guestNames = guestsOrDetails;
+      guestCount = guestsOrDetails.length;
     } else {
-        guestCount = Number(guestsOrDetails) || 0;
-        // If count provided but no names (legacy/admin toggle?), fill defaults? 
-        // Or just leave empty. Current UI for Admin Roster Toggle passes nothing for guests.
+      guestCount = Number(guestsOrDetails) || 0;
     }
 
     try {
@@ -296,21 +317,35 @@ export default function App() {
         limit(1)
       );
       const existing = await getDocs(q);
-      
-      const data = {
-        status,
-        guests: status === 'in' ? guestCount : 0,
-        guestNames: status === 'in' ? guestNames : []
-      };
+      let data = {};
+      let currentData = {};
+      if (!existing.empty) {
+        currentData = existing.docs[0].data();
+      }
+
+      if (status === 'coffee') {
+        // Set bringsCoffee true, keep other status unchanged
+        data = {
+          ...currentData,
+          bringsCoffee: true
+        };
+      } else if (status === 'not-coffee') {
+        // Set bringsCoffee false, keep other status unchanged
+        data = {
+          ...currentData,
+          bringsCoffee: false
+        };
+      } else {
+        // Normal status update (in/out), do not touch bringsCoffee
+        data = {
+          ...currentData,
+          status,
+          guests: status === 'in' ? guestCount : 0,
+          guestNames: status === 'in' ? guestNames : []
+        };
+      }
 
       if (!existing.empty) {
-        // If moving from OUT to IN, update timestamp to push to end of line
-        // If already IN and just updating guests, keep original timestamp (keep spot)
-        const currentData = existing.docs[0].data();
-        if (status === 'in' && currentData.status !== 'in') {
-            data.created_at = Timestamp.now();
-        }
-        
         await updateDoc(existing.docs[0].ref, data);
       } else {
         await addDoc(collection(db, 'availability'), {
@@ -321,8 +356,6 @@ export default function App() {
         });
       }
       await loadAvailability(selectedDate);
-      // setStatusMessage(`Saved as ${status === 'in' ? 'IN' : 'OUT'}`);
-      // Clear message after 3s
       setTimeout(() => setStatusMessage(''), 3000);
     } catch (err) {
       setStatusMessage(err.message);

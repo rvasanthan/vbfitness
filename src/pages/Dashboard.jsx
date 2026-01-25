@@ -20,7 +20,8 @@ import {
   Wand2,
   Trash2,
   Clock,
-  Share2
+  Share2,
+  Coffee
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import MatchShareCard from '../components/MatchShareCard';
@@ -28,6 +29,7 @@ import ConsolidatedRoster from '../components/ConsolidatedRoster';
 import CreateMatchModal from '../components/CreateMatchModal';
 import GuestNameModal from '../components/GuestNameModal';
 import MatchesList from '../components/MatchesList';
+import ThemeToggle from '../components/ThemeToggle';
 import { formatDayLabel, groupByMonth, parseLocalDate } from '../utils/dateHelpers';
 
 export default function Dashboard({
@@ -557,26 +559,26 @@ export default function Dashboard({
   };
 
   return (
-    <div className="min-h-screen bg-navy-950 pb-20 font-display">
+    <div className="min-h-screen bg-bg-primary pb-20">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-navy-950/80 backdrop-blur-md border-b border-navy-800/50">
+      <header className="sticky top-0 z-40 bg-bg-primary/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
              <img src="/rcc-logo.svg" alt="Logo" className="w-10 h-10 drop-shadow-lg" />
              <div className="hidden md:block">
-               <h1 className="text-navy-100 font-bold text-lg leading-tight tracking-tight">RCC Inside Edge</h1>
-               <p className="text-navy-100/50 text-[10px] uppercase tracking-widest font-semibold">Season {year}</p>
+               <h1 className="text-text-primary font-bold text-lg leading-tight tracking-tight">RCC Inside Edge</h1>
+               <p className="text-text-secondary text-[10px] uppercase tracking-widest font-semibold">Season {year}</p>
              </div>
           </div>
 
-          <div className="flex bg-navy-900 p-1 rounded-lg border border-navy-800 mx-2">
-             <button onClick={() => { setViewMode('calendar'); onRefresh && onRefresh(); }} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'calendar' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
+          <div className="flex bg-bg-secondary p-1 rounded-lg border border-border mx-2">
+             <button onClick={() => { setViewMode('calendar'); onRefresh && onRefresh(); }} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'calendar' ? 'bg-bg-tertiary text-text-primary shadow' : 'text-text-secondary hover:text-text-primary'}`}>
                 <LayoutGrid size={14} /> <span className="hidden sm:inline">Calendar</span>
              </button>
-             <button onClick={() => setViewMode('roster')} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'roster' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
+             <button onClick={() => setViewMode('roster')} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'roster' ? 'bg-bg-tertiary text-text-primary shadow' : 'text-text-secondary hover:text-text-primary'}`}>
                 <Table size={14} /> <span className="hidden sm:inline">Roster</span>
              </button>
-             <button onClick={() => { setViewMode('matches'); onRefresh && onRefresh(); }} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'matches' ? 'bg-navy-800 text-white shadow' : 'text-navy-100/50 hover:text-navy-100'}`}>
+             <button onClick={() => { setViewMode('matches'); onRefresh && onRefresh(); }} className={`p-1.5 md:px-3 md:py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${viewMode === 'matches' ? 'bg-bg-tertiary text-text-primary shadow' : 'text-text-secondary hover:text-text-primary'}`}>
                 <Swords size={14} /> <span className="hidden sm:inline">Matches</span>
              </button>
           </div>
@@ -585,21 +587,23 @@ export default function Dashboard({
             {isAdmin && (
               <button
                 onClick={onOpenAdmin}
-                className="flex items-center gap-2 px-3 py-1.5 bg-cricket-gold/10 text-cricket-gold rounded-full border border-cricket-gold/20 hover:bg-cricket-gold/20 transition-colors font-bold text-xs uppercase tracking-wider"
+                className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 text-accent rounded-full border border-accent/20 hover:bg-accent/20 transition-colors font-bold text-xs uppercase tracking-wider"
               >
                 <Shield size={14} />
                 <span className="hidden sm:inline">Admin</span>
               </button>
             )}
             
+            <ThemeToggle />
+            
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-navy-100">{user.name}</p>
-                <p className="text-xs text-navy-100/50">{user.email}</p>
+                <p className="text-sm font-medium text-text-primary">{user.name}</p>
+                <p className="text-xs text-text-secondary">{user.email}</p>
               </div>
               <button 
                 onClick={onSignOut}
-                className="p-2 text-navy-100/50 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors"
+                className="p-2 text-text-secondary hover:text-error hover:bg-error/10 rounded-full transition-colors"
                 title="Sign Out"
               >
                 <LogOut size={18} />
@@ -721,6 +725,16 @@ export default function Dashboard({
                 <div className="mb-8 p-4 bg-navy-950/50 rounded-2xl border border-navy-800/50">
                   <p className="text-navy-100/50 text-[10px] uppercase font-bold tracking-widest mb-2">Selected Date</p>
                   <h2 className="text-3xl font-bold text-navy-100 mb-2">{formatDayLabel(selectedDate)}</h2>
+                  {availability.coffee && availability.coffee.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', backgroundColor: 'rgb(var(--color-coffee-light) / 0.15)', color: 'rgb(var(--color-coffee))', fontWeight: 700, border: `1px solid rgb(var(--color-coffee) / 0.3)` }}>
+                      <Coffee size={18} style={{ color: 'rgb(var(--color-coffee))' }} />
+                      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'rgb(var(--color-coffee))' }}>
+                        {availability.coffee.length === 1
+                          ? `${availability.coffee[0].name} is bringing coffee`
+                          : `${availability.coffee.map(u => u.name).join(', ')} are bringing coffee`}
+                      </span>
+                    </div>
+                  )}
                   {holidays[selectedDate] && (
                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
                        <Info size={12} />
@@ -759,59 +773,68 @@ export default function Dashboard({
                          <p>⏰ {match?.time || '13:00'} • {match?.format || '40 Overs'}</p>
                       </div>
 
-
                       {(match?.captain1Id || match?.captain2Id) && (
-                         <div className="flex gap-2 pt-2 border-t border-navy-700/50">
-                            {match.captain1Id && (
-                                <div className="flex items-center gap-1.5 px-2 py-1 bg-cricket-gold/10 rounded border border-cricket-gold/20">
-                                   <span className="w-4 h-4 rounded-full bg-cricket-gold text-navy-900 text-[9px] font-bold flex items-center justify-center">C1</span>
-                                   <span className="text-[10px] text-cricket-gold font-bold">
-                                       {users.find(u => u.id === match.captain1Id)?.name || 'C1'}
-                                   </span>
-                                </div>
-                            )}
-                            {match.captain2Id && (
-                                <div className="flex items-center gap-1.5 px-2 py-1 bg-cricket-gold/10 rounded border border-cricket-gold/20">
-                                   <span className="w-4 h-4 rounded-full bg-cricket-gold text-navy-900 text-[9px] font-bold flex items-center justify-center">C2</span>
-                                   <span className="text-[10px] text-cricket-gold font-bold">
-                                       {users.find(u => u.id === match.captain2Id)?.name || 'C2'}
-                                   </span>
-                                </div>
-                            )}
+                         <div className="flex gap-2 pt-2 pb-3 border-b border-navy-700/50">
+                          {match.captain1Id && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-cricket-gold/10 rounded border border-cricket-gold/20">
+                               <span className="w-4 h-4 rounded-full bg-cricket-gold text-navy-900 text-[9px] font-bold flex items-center justify-center">C1</span>
+                               <span className="text-[10px] text-cricket-gold font-bold">
+                                 {users.find(u => u.id === match.captain1Id)?.name || 'C1'}
+                               </span>
+                            </div>
+                          )}
+                          {match.captain2Id && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-cricket-gold/10 rounded border border-cricket-gold/20">
+                               <span className="w-4 h-4 rounded-full bg-cricket-gold text-navy-900 text-[9px] font-bold flex items-center justify-center">C2</span>
+                               <span className="text-[10px] text-cricket-gold font-bold">
+                                 {users.find(u => u.id === match.captain2Id)?.name || 'C2'}
+                               </span>
+                            </div>
+                          )}
                          </div>
-                      )}
-                      
-                      {isAdmin && match && (
-                          <div className="grid grid-cols-2 gap-2">
-                             <button
-                                 onClick={handleShare}
-                                 disabled={isSharing}
-                                 className="w-full py-2 bg-navy-800 text-cricket-gold hover:bg-navy-700 rounded-lg text-xs font-bold border border-navy-700 transition-colors flex items-center justify-center gap-2"
-                             >
-                                 {isSharing ? <div className="w-3 h-3 rounded-full border-2 border-cricket-gold border-t-transparent animate-spin"/> : <Share2 size={12} />}
-                                 Publish
-                             </button>
-                             <button 
-                                  onClick={handleStartMatch}
-                                  className={`w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
-                                      match.status === 'active' 
-                                      ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20' 
-                                      : 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20'
-                                  }`}
-                              >
-                                  {match.status === 'active' ? 'End Match' : <> <Play size={12} fill="currentColor" /> Start Match </>}
-                              </button>
-                          </div>
-                      )}
-                      
-                      {isAdmin && !match && (
-                          <button 
-                                onClick={() => setIsMatchModalOpen(true)}
-                                className="w-full py-2 bg-navy-800 text-navy-100 hover:bg-navy-700 rounded-lg text-xs font-bold border border-navy-700 transition-colors"                            
+                        )}
+
+                      {/* Coffee Toggle Button: Only if user is IN and no one else has claimed coffee, or user is the coffee-bringer */}
+                      {isUserIn && (() => {
+                        const coffeeBringer = (availability.coffee && availability.coffee[0]) || null;
+                        const isMe = coffeeBringer && coffeeBringer.id === user.uid;
+                        // Only the coffee-bringer sees the opt-out button
+                        if (isMe) {
+                          return (
+                            <button
+                              disabled={loading}
+                              onClick={() => onSetStatus('not-coffee')}
+                              className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold border bg-coffee/10 text-coffee border-coffee/30 hover:bg-coffee/20 transition-all"
                             >
-                                Configure Match
-                          </button>
-                      )}
+                              <Coffee className="w-6 h-6" />
+                              Sorry, I am not bringing coffee
+                            </button>
+                          );
+                        }
+                        // Only show the claim button if no one is bringing coffee
+                        if (!coffeeBringer) {
+                          return (
+                            <button
+                              disabled={loading}
+                              onClick={() => onSetStatus('coffee')}
+                              className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold border bg-coffee/10 text-coffee border-coffee/30 hover:bg-coffee/20 transition-all"
+                            >
+                              <Coffee className="w-6 h-6" />
+                              Bringing Coffee
+                            </button>
+                          );
+                        }
+                        // All other users see nothing if coffee is claimed
+                        return null;
+                      })()}
+                    {isAdmin && !match && (
+                      <button 
+                        onClick={() => setIsMatchModalOpen(true)}
+                        className="w-full py-2 bg-navy-800 text-navy-100 hover:bg-navy-700 rounded-lg text-xs font-bold border border-navy-700 transition-colors"                            
+                      >
+                        Configure Match
+                      </button>
+                    )}
                     </div>
                   ) : (
                     isAdmin && (
@@ -853,28 +876,30 @@ export default function Dashboard({
 
                 {/* Status Actions */}
                 <div className="space-y-4 mb-8">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className={`grid gap-3 ${isUserIn ? 'grid-cols-1' : 'grid-cols-2'}`}>
                     {!isUserIn && (
-                    <button
-                      disabled={loading}
-                      onClick={() => onSetStatus('in', guestCount)}
-                      className="relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-navy-800 hover:bg-green-100 border border-navy-700 hover:border-green-500 transition-all group active:scale-95"
-                    >
-                      <CheckCircle2 className="w-8 h-8 text-navy-200 group-hover:text-green-600 transition-colors" />
-                      <span className="text-sm font-bold text-navy-100 group-hover:text-green-700">I'm In</span>
-                      <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
+                      <button
+                        disabled={loading}
+                        onClick={() => onSetStatus('in', guestCount)}
+                        className="relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-navy-800 hover:bg-green-100 border border-navy-700 hover:border-green-500 transition-all group active:scale-95"
+                      >
+                        <CheckCircle2 className="w-8 h-8 text-navy-200 group-hover:text-green-600 transition-colors" />
+                        <span className="text-sm font-bold text-navy-100 group-hover:text-green-700">I'm In</span>
+                        <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
                     )}
                     <button
                       disabled={loading}
                       onClick={() => onSetStatus('out')}
-                      className={`relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-navy-800 hover:bg-red-100 border border-navy-700 hover:border-red-500 transition-all group active:scale-95 ${isUserIn ? 'col-span-2' : ''}`}
+                      className={`relative overflow-hidden flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-navy-800 hover:bg-red-100 border border-navy-700 hover:border-red-500 transition-all group active:scale-95`}
                     >
                       <XCircle className="w-8 h-8 text-navy-200 group-hover:text-red-500 transition-colors" />
                       <span className="text-sm font-bold text-navy-100 group-hover:text-red-700">Can't Make It</span>
                       <div className="absolute inset-0 bg-red-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                   </div>
+
+                  {/* Removed duplicate Coffee Toggle Button below Can't Make It */}
                   
                   {/* Guest Selection */}
                   <div className="bg-navy-800/50 p-4 rounded-xl border border-navy-700/50 flex flex-col gap-3">
@@ -925,8 +950,9 @@ export default function Dashboard({
                                 {team1Players.length === 0 && <p className="text-navy-100/20 text-xs italic w-full text-center py-2">No players picked.</p>}
                                 {team1Players.map(u => {
                                     const isCommon = u.id === commonPlayerId;
+                                    const isCaptain = match.captain1Id === u.id;
                                     return (
-                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isCommon ? 'bg-purple-500/10 border-purple-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--color-accent) / 0.5)' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(239 68 68 / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--color-accent) / 0.1)' : isCommon ? 'rgb(168 85 247 / 0.1)' : 'rgb(239 68 68 / 0.1)' }}>
                                        <div 
                                             onClick={(e) => {
                                                 if (!isAdmin) return;
@@ -937,12 +963,12 @@ export default function Dashboard({
                                                     handleSetCaptain(u.id, '1');
                                                 }
                                             }}
-                                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'} ${isAdmin ? 'cursor-pointer hover:scale-110 hover:bg-red-500 hover:text-white' : ''}`}
+                                            style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--color-accent))' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(239 68 68 / 0.2)', color: isCaptain ? 'white' : isCommon ? 'rgb(192 132 250)' : 'rgb(248 113 113)', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
                                             title={isAdmin ? (match.captain1Id === u.id ? "Switch to Blue Captain" : "Promote to Red Captain") : ""}
                                        >
                                          {match.captain1Id === u.id ? 'C1' : u.name.charAt(0)}
                                        </div>
-                                       <span className={`text-xs font-bold ${isCommon ? 'text-purple-400' : 'text-red-400'}`}>
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isCaptain ? 'rgb(var(--color-accent))' : isCommon ? 'rgb(192 132 250)' : 'rgb(248 113 113)' }}>
                                            {u.displayName || u.name}
                                            {isCommon && <span className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 px-1 rounded uppercase">Common</span>}
                                        </span>
@@ -974,8 +1000,9 @@ export default function Dashboard({
                                 {team2Players.length === 0 && <p className="text-navy-100/20 text-xs italic w-full text-center py-2">No players picked.</p>}
                                 {team2Players.map(u => {
                                     const isCommon = u.id === commonPlayerId;
+                                    const isCaptain = match.captain2Id === u.id;
                                     return (
-                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isCommon ? 'bg-purple-500/10 border-purple-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
+                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--color-accent) / 0.5)' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(59 130 246 / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--color-accent) / 0.1)' : isCommon ? 'rgb(168 85 247 / 0.1)' : 'rgb(59 130 246 / 0.1)' }}>
                                        <div 
                                             onClick={(e) => {
                                                 if (!isAdmin) return;
@@ -986,12 +1013,12 @@ export default function Dashboard({
                                                     handleSetCaptain(u.id, '2');
                                                 }
                                             }}
-                                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isCommon ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'} ${isAdmin ? 'cursor-pointer hover:scale-110 hover:bg-blue-500 hover:text-white' : ''}`}
+                                            style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--color-accent))' : isCommon ? 'rgb(168 85 247 / 0.2)' : 'rgb(59 130 246 / 0.2)', color: isCaptain ? 'white' : isCommon ? 'rgb(192 132 250)' : 'rgb(96 165 250)', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
                                             title={isAdmin ? (match.captain2Id === u.id ? "Unassign Captain" : "Promote to Blue Captain") : ""}
                                        >
                                          {match.captain2Id === u.id ? 'C2' : u.name.charAt(0)}
                                        </div>
-                                       <span className={`text-xs font-bold ${isCommon ? 'text-purple-400' : 'text-blue-400'}`}>
+                                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isCaptain ? 'rgb(var(--color-accent))' : isCommon ? 'rgb(192 132 250)' : 'rgb(96 165 250)' }}>
                                            {u.displayName || u.name}
                                            {isCommon && <span className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 px-1 rounded uppercase">Common</span>}
                                        </span>
@@ -1013,7 +1040,7 @@ export default function Dashboard({
                   )}
 
                   {/* Available / Pool (Members) */}
-                  <div className="space-y-3">
+                  <div className="bg-bg-secondary border border-border rounded-lg p-4 space-y-3 mb-6">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
@@ -1027,9 +1054,10 @@ export default function Dashboard({
                       {unpickedMembers.map(u => {
                         const isC1 = match?.captain1Id === u.id;
                         const isC2 = match?.captain2Id === u.id;
+                        const isCaptain = isC1 || isC2;
                         
                         return (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${isC1 ? 'bg-red-500/10 border-red-500/50 shadow-sm' : isC2 ? 'bg-blue-500/10 border-blue-500/50 shadow-sm' : 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20'}`}>
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', borderRadius: '0.5rem', border: `1px solid ${isCaptain ? 'rgb(var(--color-accent) / 0.5)' : 'rgb(34 197 94 / 0.2)'}`, backgroundColor: isCaptain ? 'rgb(var(--color-accent) / 0.1)' : 'rgb(34 197 94 / 0.1)', transition: 'all 0.2s' }}>
                            {/* Avatar / Captain Cycle */}
                            <div 
                                onClick={(e) => {
@@ -1039,13 +1067,13 @@ export default function Dashboard({
                                    else if (isC2) handleSetCaptain(u.id, null); // Blue -> None
                                    else handleSetCaptain(u.id, '1'); // None -> Red
                                }}
-                               className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${isAdmin ? 'cursor-pointer hover:scale-110' : ''} ${isC1 ? 'bg-red-500 text-white' : isC2 ? 'bg-blue-500 text-white' : 'bg-green-500/20 text-green-400'}`}
+                               style={{ width: '1.25rem', height: '1.25rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', fontWeight: 700, backgroundColor: isCaptain ? 'rgb(var(--color-accent))' : 'rgb(34 197 94 / 0.2)', color: isCaptain ? 'white' : 'rgb(74 222 128)', cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s' }}
                                title={isAdmin ? "Click to cycle: Red Captain -> Blue Captain -> None" : ""}
                            >
-                             {isC1 ? 'R' : isC2 ? 'B' : u.name.charAt(0)}
+                             {isC1 ? 'C1' : isC2 ? 'C2' : u.name.charAt(0)}
                            </div>
                            
-                           <span className={`text-xs font-medium ${isC1 ? 'text-red-400' : isC2 ? 'text-blue-400' : 'text-navy-100'}`}>{u.name}</span>
+                           <span style={{ fontSize: '0.75rem', fontWeight: 500, color: isCaptain ? 'rgb(var(--color-accent))' : 'rgb(var(--color-text-primary))' }}>{u.name}</span>
                            {u.guests > 0 && (
                              <span className="ml-1 text-[10px] bg-green-500/20 text-green-400 px-1.5 rounded-full font-bold">+{u.guests}</span>
                            )}
@@ -1078,11 +1106,9 @@ export default function Dashboard({
                     </div>
                   </div>
 
-                  <div className="h-px bg-navy-800/50" />
-
                   {/* Guest Pool */}
                   {unpickedGuests.length > 0 && (
-                      <div className="space-y-3">
+                      <div className="bg-bg-secondary border border-border rounded-lg p-4 space-y-3 mb-6">
                         <div className="flex items-center justify-between">
                           <h4 className="text-xs font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
                              <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
@@ -1125,45 +1151,41 @@ export default function Dashboard({
                       </div>
                   )}
 
-                  <div className="h-px bg-navy-800/50" />
-
                   {/* Waiting List */}
                   {waitListPlayers.length > 0 && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-yellow-600 uppercase tracking-wider flex items-center gap-2">
-                            <Clock size={14} className="text-yellow-600" />
+                      <div className="bg-bg-secondary border border-border rounded-lg p-4 mb-6">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                          <h4 className="text-xs font-bold text-warning uppercase tracking-wider flex items-center gap-2">
+                            <Clock size={16} style={{ color: 'rgb(var(--color-waiting-brown))' }} />
                             Waiting List
                           </h4>
-                          <span className="text-[10px] font-mono font-bold bg-navy-800 px-2 py-0.5 rounded text-navy-100/50">{waitListPlayers.length}</span>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded">{waitListPlayers.length}</span>
                         </div>
                         
-                        <div className="flex flex-wrap gap-2">
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                           {waitListPlayers.map((u, i) => (
-                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-yellow-900/10 border-yellow-700/30">
-                               <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-yellow-700/20 text-yellow-600">
-                                 {i + 1}
-                               </div>
-                               <span className="text-xs font-medium text-yellow-600">{u.displayName || u.name}</span>
+                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: 'rgb(var(--color-waiting-light) / 0.2)', border: `1px solid rgb(var(--color-waiting-brown))` }}>
+                               <Clock size={14} style={{ color: 'rgb(var(--color-waiting-brown))' }} />
+                               <span className="text-xs font-bold" style={{ color: 'rgb(var(--color-waiting-brown))' }}>{u.displayName || u.name}</span>
 
                                {(canPickTeam1 || canPickTeam2) && (
-                                   <div className="flex ml-2 gap-1 pl-2 border-l border-yellow-700/30">
+                                   <div style={{ display: 'flex', marginLeft: '0.5rem', gap: '0.25rem', paddingLeft: '0.5rem', borderLeft: '1px solid #d1d5db' }}>
                                        {canPickTeam1 && (
                                            <button 
                                              onClick={() => handlePickPlayer(u.id, 'team1')}
-                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                                             style={{ width: '1.5rem', height: '1.5rem', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}
                                              title="Add to Spartans"
                                            >
-                                             <Plus size={12} />
+                                             <Plus size={16} />
                                            </button>
                                        )}
                                        {canPickTeam2 && (
                                            <button 
                                              onClick={() => handlePickPlayer(u.id, 'team2')}
-                                             className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-colors"
+                                             style={{ width: '1.5rem', height: '1.5rem', borderRadius: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}
                                              title="Add to Warriors"
                                            >
-                                             <Plus size={12} />
+                                             <Plus size={16} />
                                            </button>
                                        )}
                                    </div>
@@ -1174,10 +1196,29 @@ export default function Dashboard({
                       </div>
                   )}
 
-                  {waitListPlayers.length > 0 && <div className="h-px bg-navy-800/50" />}
+                  {/* BRINGING COFFEE */}
+                  {availability.coffee && availability.coffee.length > 0 && (
+                  <div className="bg-bg-secondary border border-border rounded-lg p-4 mb-6">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <h4 className="text-xs font-bold text-coffee uppercase tracking-wider flex items-center gap-2">
+                        <Coffee size={16} style={{ color: 'rgb(var(--color-coffee))' }} />
+                        Bringing Coffee
+                      </h4>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded">{availability.coffee.length}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {availability.coffee.map(u => (
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} key={u.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: 'rgb(var(--color-coffee-light) / 0.2)', border: `1px solid rgb(var(--color-coffee))` }}>
+                           <Coffee size={14} style={{ color: 'rgb(var(--color-coffee))' }} />
+                           <span className="text-xs font-bold" style={{ color: 'rgb(var(--color-coffee))' }}>{u.name}</span>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                  )}
 
                   {/* OUT */}
-                  <div className="space-y-3">
+                  <div className="bg-bg-secondary border border-border rounded-lg p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
@@ -1243,11 +1284,12 @@ export default function Dashboard({
                 team1={team1Players}
                 team2={team2Players}
                 matchDetails={{
-                    date: selectedDate,
-                    venue: match.venue,
-                    time: match.time,
-                    captain1Name: users.find(u => u.id === match.captain1Id)?.name,
-                    captain2Name: users.find(u => u.id === match.captain2Id)?.name
+                  date: selectedDate,
+                  venue: match.venue,
+                  time: match.time,
+                  captain1Name: users.find(u => u.id === match.captain1Id)?.name,
+                  captain2Name: users.find(u => u.id === match.captain2Id)?.name,
+                  coffee: availability.coffee
                 }}
             />
         )}

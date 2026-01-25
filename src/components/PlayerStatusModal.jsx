@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Clock, Shield, Navigation } from 'lucide-react';
+import { X, CheckCircle2, Clock, Shield, Navigation, Coffee } from 'lucide-react';
 
 export default function PlayerStatusModal({ isOpen, onClose, match, users, isAdmin, onCheckIn }) {
   if (!isOpen || !match) return null;
@@ -12,6 +12,7 @@ export default function PlayerStatusModal({ isOpen, onClose, match, users, isAdm
   const team2Ids = match.team2 || [];
   const checkedInIds = match.checkedInPlayers || [];
   const onMyWayIds = match.onMyWayPlayers || [];
+  const coffeeIds = match.coffeePlayerIds || [];
 
   // Categorize
   const players = [];
@@ -27,7 +28,8 @@ export default function PlayerStatusModal({ isOpen, onClose, match, users, isAdm
             colorClass: 'text-red-400',
             bgClass: 'bg-red-500/10 border-red-500/20',
             checkedIn: checkedInIds.includes(id),
-            onMyWay: onMyWayIds.includes(id)
+            onMyWay: onMyWayIds.includes(id),
+            bringsCoffee: coffeeIds.includes(id)
         });
     }
   });
@@ -43,13 +45,15 @@ export default function PlayerStatusModal({ isOpen, onClose, match, users, isAdm
             colorClass: 'text-blue-400',
             bgClass: 'bg-blue-500/10 border-blue-500/20',
             checkedIn: checkedInIds.includes(id),
-            onMyWay: onMyWayIds.includes(id)
+            onMyWay: onMyWayIds.includes(id),
+            bringsCoffee: coffeeIds.includes(id)
         });
     }
   });
 
   const checkedInList = players.filter(p => p.checkedIn);
   const onMyWayList = players.filter(p => p.onMyWay && !p.checkedIn);
+  const coffeeList = players.filter(p => p.bringsCoffee);
   const othersList = players.filter(p => !p.checkedIn && !p.onMyWay);
 
   return (
@@ -93,7 +97,23 @@ export default function PlayerStatusModal({ isOpen, onClose, match, users, isAdm
             </div>
 
             {/* Lists */}
-            <div className="space-y-6">
+                        <div className="space-y-6">
+                                {/* Bringing Coffee */}
+                                {coffeeList.length > 0 && (
+                                    <div>
+                                        <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                            <Coffee size={14} /> Bringing Coffee
+                                        </h4>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {coffeeList.map(p => (
+                                                <div key={p.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border bg-amber-500/10 border-amber-500/30`}>
+                                                    <Coffee size={12} className="text-amber-400" />
+                                                    <span className="text-sm font-bold text-amber-200 truncate flex-1">{p.name}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                 {/* Checked In */}
                 <div>
                    <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider mb-3 flex items-center gap-2">
