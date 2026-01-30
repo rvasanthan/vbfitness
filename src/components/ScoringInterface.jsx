@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Undo2, RotateCcw } from 'lucide-react';
+import { X, Undo2, RotateCcw, Trophy } from 'lucide-react';
 import { doc, updateDoc, arrayUnion, increment, deleteField } from 'firebase/firestore'; 
 import { db } from '../firebase';
 
@@ -15,6 +15,7 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
   const [showNewBowlerModal, setShowNewBowlerModal] = useState(false);
   const [selectedNewPlayer, setSelectedNewPlayer] = useState(''); // For both modals
   const [wicketData, setWicketData] = useState(null); // To store wicket context if needed
+  const [activeExtraType, setActiveExtraType] = useState(null); // 'wd' or 'nb'
 
   // 2. Early Return only AFTER hooks
   if (!isOpen || !match || !match.scoring) return null;
@@ -66,6 +67,10 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                  if (extraType === 'wd') ballsFacedAdd = 0; // Wide not count as ball faced
                  // NB counts as ball faced but NOT as legal ball for over
                  legalBall = false;
+             } else if (extraType === 'b' || extraType === 'lb') {
+                 totalRunsAdd = runs;
+                 ballsFacedAdd = 1;
+                 legalBall = true;
              }
           }
           
@@ -74,10 +79,12 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
           
           // 1. Total Score
           updates['scoring.totalRuns'] = increment(totalRunsAdd);
-          updates['scoring.thisOver'] = arrayUnion(
-              isWicket ? 'W' : 
-              ((runs > 0 ? runs : '') + (extraType ? extraType.toUpperCase() : runs === 0 ? '0' : ''))
-          );
+          
+          const ballText = isWicket ? 'W' : 
+                           (isExtra ? `${runs > 0 ? runs : ''}${extraType.toUpperCase()}` : 
+                           (runs === 0 ? '0' : runs.toString()));
+
+          updates['scoring.thisOver'] = arrayUnion(ballText);
 
           // 2. Strike Rotation (Odd runs)
           // Run based rotation
@@ -89,17 +96,23 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
           
           // 3. Batsman Stats (Attrib to Striker)
           
-          if (extraType !== 'wd') {
-               // Runs logic: If NB, runs count to batsman.
+          if (extraType !== 'wd' && extraType !== 'b' && extraType !== 'lb') {
+               // Runs logic: If NB, runs count to batsman. Byes/LegByes do NOT.
                updates[`scoring.batsmenStats.${strikerId}.runs`] = increment(runs);
-               updates[`scoring.batsmenStats.${strikerId}.balls`] = increment(ballsFacedAdd);
                
                if (runs === 4) updates[`scoring.batsmenStats.${strikerId}.fours`] = increment(1);
                if (runs === 6) updates[`scoring.batsmenStats.${strikerId}.sixes`] = increment(1);
           }
+          
+          // Always increment balls faced for striker unless it's a Wide
+          if (extraType !== 'wd') {
+              updates[`scoring.batsmenStats.${strikerId}.balls`] = increment(ballsFacedAdd);
+          }
 
           // 4. Bowler Stats
-          updates[`scoring.bowlerStats.${bowlerId}.runs`] = increment(totalRunsAdd);
+          // Standard rules: Byes and Leg Byes are NOT charged to the bowler
+          const chargedToBowler = (extraType === 'b' || extraType === 'lb') ? 0 : totalRunsAdd;
+          updates[`scoring.bowlerStats.${bowlerId}.runs`] = increment(chargedToBowler);
           if (legalBall) {
               updates[`scoring.bowlerStats.${bowlerId}.balls`] = increment(1);
           }
@@ -113,8 +126,8 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                       type: wicketInfo.type,
                       bowlerId: bowlerId,
                       fielderId: wicketInfo.fielder || null,
-                      over: Math.floor((scoring.bowlerStats?.[bowlerId]?.balls || 0) / 6),
-                      ball: ((scoring.bowlerStats?.[bowlerId]?.balls || 0) % 6) + 1
+                      over: scoring.totalOvers || 0,
+                      ball: currentOverBalls + 1
                   };
               }
           }
@@ -419,6 +432,8 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
           
           if (lastEvent.toUpperCase().includes('WD')) extraType = 'wd';
           else if (lastEvent.toUpperCase().includes('NB')) extraType = 'nb';
+          else if (lastEvent.toUpperCase().includes('LB')) extraType = 'lb';
+          else if (lastEvent.toUpperCase().includes('B')) extraType = 'b';
           
           const numPart = lastEvent.replace(/\D/g, '');
           runs = numPart === '' ? 0 : parseInt(numPart);
@@ -454,7 +469,8 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
 
           // Revert Bowler stats
           const bowlBallsDed = (extraType === 'wd' || extraType === 'nb') ? 0 : 1;
-          updates[`scoring.bowlerStats.${scoring.currentBowlerId}.runs`] = increment(-totalDed);
+          const bowlerRunsDed = (extraType === 'b' || extraType === 'lb') ? 0 : totalDed;
+          updates[`scoring.bowlerStats.${scoring.currentBowlerId}.runs`] = increment(-bowlerRunsDed);
           updates[`scoring.bowlerStats.${scoring.currentBowlerId}.balls`] = increment(-bowlBallsDed);
           
           const matchRef = doc(db, 'matches', match.id);
@@ -539,6 +555,11 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
       return getPlayers(ids);
   };
 
+  // Innings Progress Helpers
+  const currentOverBalls = (scoring.thisOver || []).filter(b => !b.includes('WD') && !b.includes('NB')).length;
+  const inningsOverDisplay = `${scoring.totalOvers || 0}.${currentOverBalls}`;
+  const totalLegalBalls = (scoring.totalOvers || 0) * 6 + currentOverBalls;
+
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary font-sans text-text-primary">
@@ -583,9 +604,9 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                            {scoring.totalRuns}/{scoring.totalWickets}
                        </div>
                        <div className="text-text-secondary text-sm mt-1 font-medium">
-                           {Math.floor((scoring.bowlerStats?.[scoring.currentBowlerId]?.balls || 0) + (scoring.totalOvers*6 || 0) / 6)}.{ (scoring.bowlerStats?.[scoring.currentBowlerId]?.balls || 0) % 6 } Overs
+                           {inningsOverDisplay} Overs
                            <span className="mx-2 text-text-tertiary">|</span>
-                           CRR {((scoring.totalRuns/(Math.max(1, ((scoring.totalOvers || 0)*6 + (scoring.thisOver?.length||0))/6))).toFixed(2))}
+                           CRR {(scoring.totalRuns / Math.max(0.1, totalLegalBalls / 6)).toFixed(2)}
                        </div>
                    </div>
 
@@ -593,16 +614,21 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                    <div className="flex flex-col items-center md:items-end gap-2">
                        <span className="text-[10px] uppercase font-bold text-text-tertiary tracking-widest">This Over</span>
                        <div className="flex gap-2">
-                           {(scoring.thisOver || []).map((ball, i) => (
-                               <div key={i} className={`w-9 h-9 flex items-center justify-center rounded-full font-bold text-sm border shadow-sm ${
-                                   ball === 'W' ? 'bg-error/10 border-error/20 text-error' :
-                                   ball === '4' ? 'bg-accent/10 border-accent/20 text-accent' :
-                                   ball === '6' ? 'bg-purple-500/10 border-purple-500/20 text-purple-500' :
+                           {(scoring.thisOver || []).map((ball, i) => {
+                               const isWD = ball.includes('WD');
+                               const isNB = ball.includes('NB');
+                               return (
+                               <div key={i} className={`w-9 h-9 flex items-center justify-center rounded-full font-bold text-xs border shadow-sm ${
+                                   ball === 'W' ? 'bg-error text-white border-error' :
+                                   isWD ? 'bg-waiting text-white border-waiting' :
+                                   isNB ? 'bg-orange-500 text-white border-orange-500' :
+                                   ball.includes('4') ? 'bg-accent/10 border-accent/20 text-accent' :
+                                   ball.includes('6') ? 'bg-purple-500/10 border-purple-500/20 text-purple-500' :
                                    'bg-bg-primary border-border text-text-secondary'
                                }`}>
                                    {ball}
                                </div>
-                           ))}
+                           )})}
                            {(!scoring.thisOver || scoring.thisOver.length === 0) && (
                                <span className="text-text-tertiary text-xs italic py-2">Over starting...</span>
                            )}
@@ -685,40 +711,199 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
       {/* 3. Control Pad */}
       <div className="bg-bg-secondary p-4 border-t border-border shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] pb-8 z-20">
           <div className="max-w-md mx-auto space-y-2">
+              {activeExtraType && (
+                  <div className="bg-bg-primary p-3 rounded-xl border-2 border-accent shadow-xl mb-4 animate-fade-in text-left">
+                      <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-white shadow-md ${
+                                  activeExtraType === 'wd' ? 'bg-waiting' : 
+                                  activeExtraType === 'nb' ? 'bg-orange-500' : 
+                                  'bg-blue-500'
+                              }`}>
+                                  {activeExtraType.toUpperCase()}
+                              </div>
+                              <div>
+                                  <h4 className="text-sm font-black text-text-primary uppercase tracking-tight">
+                                      {activeExtraType === 'wd' ? 'Wide Ball' : 
+                                       activeExtraType === 'nb' ? 'No Ball' : 
+                                       activeExtraType === 'lb' ? 'Leg Bye' : 'Bye'} Recorded
+                                  </h4>
+                                  <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">Select additional runs</p>
+                              </div>
+                          </div>
+                          <button 
+                              onClick={() => setActiveExtraType(null)}
+                              className="p-2 px-4 text-xs font-black bg-bg-tertiary text-text-tertiary hover:text-error hover:bg-error/10 rounded-lg transition-all uppercase"
+                          >
+                              Cancel
+                          </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-4 gap-2">
+                           <button onClick={() => { handleScoreUpdate(0, true, activeExtraType); setActiveExtraType(null); }} className="h-10 bg-bg-secondary border border-border text-text-primary font-bold rounded-lg hover:bg-bg-tertiary transition-colors">
+                               {activeExtraType === 'lb' || activeExtraType === 'b' ? '0' : '+0'}
+                           </button>
+                           {[1, 2, 3].map(run => (
+                               <button 
+                                  key={run}
+                                  onClick={() => { handleScoreUpdate(run, true, activeExtraType); setActiveExtraType(null); }} 
+                                  className="h-10 bg-bg-secondary border border-border text-text-primary font-bold rounded-lg hover:bg-bg-tertiary transition-colors"
+                               >
+                                  +{run}
+                               </button>
+                           ))}
+                           
+                           <button 
+                                onClick={() => { handleScoreUpdate(4, true, activeExtraType); setActiveExtraType(null); }} 
+                                className={`h-12 col-span-2 flex items-center justify-center gap-2 font-black text-white rounded-lg shadow-lg transition-all active:scale-95 ${
+                                    activeExtraType === 'wd' ? 'bg-waiting' : 
+                                    activeExtraType === 'nb' ? 'bg-orange-500' : 
+                                    'bg-blue-600'
+                                }`}
+                            >
+                                <Trophy size={14} /> +4 Boundary
+                            </button>
+                            
+                            {(activeExtraType === 'nb' || activeExtraType === 'b' || activeExtraType === 'lb') && (
+                                <button 
+                                    onClick={() => { handleScoreUpdate(6, true, activeExtraType); setActiveExtraType(null); }} 
+                                    className="h-12 col-span-2 flex items-center justify-center gap-2 bg-purple-600 font-black text-white rounded-lg shadow-lg transition-all active:scale-95"
+                                >
+                                    <Trophy size={14} /> +6 Boundary
+                                </button>
+                            )}
+                            
+                            {activeExtraType === 'wd' && (
+                                <div className="col-span-2" /> 
+                            )}
+                      </div>
+                  </div>
+              )}
+
               <div className="grid grid-cols-4 gap-2">
                   {[0, 1, 2, 3].map(run => (
                       <button
                         key={run}
-                        onClick={() => handleScoreUpdate(run)}
+                        onClick={() => {
+                            if (activeExtraType) {
+                                handleScoreUpdate(run, true, activeExtraType);
+                                setActiveExtraType(null);
+                            } else {
+                                handleScoreUpdate(run);
+                            }
+                        }}
                         disabled={loading}
-                        className="h-12 bg-bg-primary text-text-primary font-bold text-lg rounded-lg hover:bg-bg-tertiary active:scale-95 transition-all border border-border shadow-sm"
+                        className={`h-12 font-bold text-lg rounded-lg active:scale-95 transition-all border shadow-sm ${
+                            activeExtraType 
+                            ? 'bg-bg-secondary border-accent text-accent' 
+                            : 'bg-bg-primary text-text-primary border-border hover:bg-bg-tertiary'
+                        }`}
                       >
-                          {run}
+                          {activeExtraType ? `+${run}` : run}
                       </button>
                   ))}
               </div>
               <div className="grid grid-cols-4 gap-2">
-                   <button onClick={() => handleScoreUpdate(4)} className="h-12 bg-accent text-white font-black text-lg rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-accent/20">4</button>
-                   <button onClick={() => handleScoreUpdate(6)} className="h-12 bg-purple-600 text-white font-black text-lg rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-purple-600/20">6</button>
-                   <button onClick={() => handleScoreUpdate(0, true, 'wd')} className="h-12 bg-waiting text-white font-bold text-sm rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-waiting/20">WD</button>
-                   <button onClick={() => handleScoreUpdate(0, true, 'nb')} className="h-12 bg-orange-500 text-white font-bold text-sm rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-orange-500/20">NB</button>
-              </div>
-              <div className="grid grid-cols-4 gap-2 pt-2">
-                   <button onClick={handleUndo} disabled={loading} className="col-span-1 h-12 bg-bg-primary border border-border text-text-secondary rounded-lg flex items-center justify-center hover:bg-bg-tertiary active:scale-95 transition-all"><Undo2 size={20}/></button>
-                   <button onClick={handleResetOver} disabled={loading} className="col-span-1 h-12 bg-bg-primary border border-border text-accent font-bold text-xs uppercase tracking-wider rounded-lg flex flex-col items-center justify-center hover:bg-bg-tertiary active:scale-95 transition-all">
-                        <RotateCcw size={14} className="mb-0.5" />
-                        Reset
-                   </button>
+                   <button 
+                        onClick={() => {
+                            if (activeExtraType) {
+                                handleScoreUpdate(4, true, activeExtraType);
+                                setActiveExtraType(null);
+                            } else {
+                                handleScoreUpdate(4);
+                            }
+                        }} 
+                        className={`h-12 font-black text-lg rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-lg ${
+                            activeExtraType 
+                            ? (activeExtraType === 'wd' ? 'bg-waiting shadow-waiting/20' : 
+                               activeExtraType === 'nb' ? 'bg-orange-500 shadow-orange-500/20' : 
+                               'bg-blue-600 shadow-blue-600/20')
+                            : 'bg-accent shadow-accent/20'
+                        } text-white`}
+                    >
+                        {activeExtraType ? `+4` : '4'}
+                    </button>
+                   <button 
+                        onClick={() => {
+                            if (activeExtraType) {
+                                handleScoreUpdate(6, true, activeExtraType);
+                                setActiveExtraType(null);
+                            } else {
+                                handleScoreUpdate(6);
+                            }
+                        }} 
+                        disabled={activeExtraType === 'wd'}
+                        className={`h-12 font-black text-lg rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-lg ${
+                            activeExtraType 
+                            ? (activeExtraType === 'nb' ? 'bg-orange-500 shadow-orange-500/20' : 
+                               activeExtraType === 'wd' ? 'bg-bg-tertiary opacity-50 cursor-not-allowed' :
+                               'bg-purple-600 shadow-purple-600/20')
+                            : 'bg-purple-600 shadow-purple-600/20'
+                        } text-white`}
+                    >
+                        {activeExtraType === 'nb' ? '+6' : '6'}
+                    </button>
                    <button 
                         onClick={() => {
                            setWicketDetails({ type: 'Bowled', fielder: '', who: scoring.strikerId });
                            setShowWicketDetailsModal(true);
                        }}
-                       className="col-span-1 h-12 bg-error text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:opacity-90 shadow-lg shadow-error/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                       className="h-12 bg-error text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:opacity-90 shadow-lg shadow-error/20 active:scale-95 transition-all flex items-center justify-center gap-1"
                     >
                         Wicket
                    </button>
-                   <button onClick={() => setShowNewBowlerModal(true)} className="col-span-1 h-12 bg-bg-primary border border-border text-text-primary font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-bg-tertiary active:scale-95 transition-all">Swap</button>
+                   <button onClick={() => setShowNewBowlerModal(true)} className="h-12 bg-bg-primary border border-border text-text-primary font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-bg-tertiary active:scale-95 transition-all">Swap</button>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                   <button 
+                        onClick={() => setActiveExtraType(activeExtraType === 'wd' ? null : 'wd')} 
+                        className={`h-10 font-bold text-sm rounded-lg hover:opacity-90 active:scale-95 transition-all border-2 ${
+                            activeExtraType === 'wd' 
+                            ? 'bg-waiting border-white shadow-waiting/20' 
+                            : 'bg-waiting border-transparent shadow-waiting/10 opacity-80'
+                        } text-white`}
+                    >
+                        WD
+                    </button>
+                   <button 
+                        onClick={() => setActiveExtraType(activeExtraType === 'nb' ? null : 'nb')} 
+                        className={`h-10 font-bold text-sm rounded-lg hover:opacity-90 active:scale-95 transition-all border-2 ${
+                            activeExtraType === 'nb' 
+                            ? 'bg-orange-500 border-white shadow-orange-500/20' 
+                            : 'bg-orange-500 border-transparent shadow-orange-500/10 opacity-80'
+                        } text-white`}
+                    >
+                        NB
+                    </button>
+                    <button 
+                        onClick={() => setActiveExtraType(activeExtraType === 'lb' ? null : 'lb')} 
+                        className={`h-10 font-bold text-sm rounded-lg hover:opacity-90 active:scale-95 transition-all border-2 ${
+                            activeExtraType === 'lb' 
+                            ? 'bg-blue-600 border-white shadow-blue-600/20' 
+                            : 'bg-blue-600 border-transparent shadow-blue-600/10 opacity-80'
+                        } text-white`}
+                    >
+                        LB
+                    </button>
+                    <button 
+                        onClick={() => setActiveExtraType(activeExtraType === 'b' ? null : 'b')} 
+                        className={`h-10 font-bold text-sm rounded-lg hover:opacity-90 active:scale-95 transition-all border-2 ${
+                            activeExtraType === 'b' 
+                            ? 'bg-blue-500 border-white shadow-blue-500/20' 
+                            : 'bg-blue-500 border-transparent shadow-blue-500/10 opacity-80'
+                        } text-white`}
+                    >
+                        B
+                    </button>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2 pt-2">
+                   <button onClick={handleUndo} disabled={loading} className="col-span-1 h-12 bg-bg-primary border border-border text-text-secondary rounded-lg flex items-center justify-center hover:bg-bg-tertiary active:scale-95 transition-all"><Undo2 size={20}/></button>
+                   <button onClick={handleResetOver} disabled={loading} className="col-span-3 h-12 bg-bg-primary border border-border text-accent font-bold text-xs uppercase tracking-wider rounded-lg flex items-center justify-center gap-2 hover:bg-bg-tertiary active:scale-95 transition-all">
+                        <RotateCcw size={14} />
+                        Reset Over Statistics
+                   </button>
               </div>
           </div>
       </div>
