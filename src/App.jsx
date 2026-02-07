@@ -195,11 +195,22 @@ export default function App() {
       const weekendsRes = getSeasonWeekends(targetYear);
       const holidaysRes = getHolidays(targetYear);
 
-      // Merge weekends and holidays
-      const combinedDates = new Set(weekendsRes.dates || []);
+      // Merge weekends and holidays, filtering out past dates
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      
+      const combinedDates = new Set();
+      
+      (weekendsRes.dates || []).forEach(d => {
+        if (d >= todayStr) combinedDates.add(d);
+      });
+
       if (holidaysRes.holidays) {
-        holidaysRes.holidays.forEach(h => combinedDates.add(h.date));
+        holidaysRes.holidays.forEach(h => {
+          if (h.date >= todayStr) combinedDates.add(h.date);
+        });
       }
+      
       const sortedDates = Array.from(combinedDates).sort();
 
       setWeekendDates(sortedDates);
@@ -462,6 +473,7 @@ export default function App() {
         isOpen={true}
         match={activeScoringMatch}
         users={users}
+        user={currentUser}
         onClose={() => setActiveScoringMatch(null)}
         onUpdateLocal={(updatedMatch) => {
             setActiveScoringMatch(updatedMatch); 

@@ -1,26 +1,39 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Undo2, RotateCcw, Trophy } from 'lucide-react';
-import { doc, updateDoc, arrayUnion, increment, deleteField } from 'firebase/firestore'; 
+import { X, Undo2, RotateCcw, Trophy, Zap, Settings, Disc } from 'lucide-react';
+import { doc, updateDoc, arrayUnion, increment, deleteField, getDoc } from 'firebase/firestore'; 
 import { db } from '../firebase';
+import ScoreboardModal from './ScoreboardModal';
+import TossModal from './TossModal';
 
-export default function ScoringInterface({ isOpen, match, users, onClose, onUpdateLocal }) {
+export default function ScoringInterface({ isOpen, match, users, user, onClose, onUpdateLocal }) {
   // 1. Hooks (Always Call First)
   const [loading, setLoading] = useState(false);
+  const [showScoreboard, setShowScoreboard] = useState(false);
+  const [showTossModal, setShowTossModal] = useState(false);
   
   // Modals for Wicket/Over
   const [showWicketDetailsModal, setShowWicketDetailsModal] = useState(false);
-  const [wicketDetails, setWicketDetails] = useState({ type: 'Bowled', fielder: '', who: '' }); // type, fielder, who
+  const [wicketDetails, setWicketDetails] = useState({ type: 'Bowled', fielder: '', fielder2: '', who: '' }); // type, fielder, fielder2, who
   const [showNewBatsmanModal, setShowNewBatsmanModal] = useState(false);
   const [showNewBowlerModal, setShowNewBowlerModal] = useState(false);
   const [selectedNewPlayer, setSelectedNewPlayer] = useState(''); // For both modals
   const [wicketData, setWicketData] = useState(null); // To store wicket context if needed
   const [activeExtraType, setActiveExtraType] = useState(null); // 'wd' or 'nb'
+  const [showInningsEndModal, setShowInningsEndModal] = useState(false);
 
   // 2. Early Return only AFTER hooks
   if (!isOpen || !match || !match.scoring) return null;
 
   const { scoring } = match;
+
+  const maxOvers = useMemo(() => {
+    if (!match.format) return 40;
+    const format = match.format.toLowerCase();
+    if (format.includes('t20')) return 20;
+    const num = parseInt(format);
+    return isNaN(num) ? 40 : num;
+  }, [match.format]);
 
   // Derived Values
   const getPlayers = (ids) => {
@@ -38,7 +51,45 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
 
   const getName = (id) => users?.find(u => u.uid === id || u.id === id)?.name || 'Unknown';
 
+  const canEditToss = user?.role === 'admin' || user?.uid === match.captain1Id || user?.uid === match.captain2Id;
 
+  const handleSaveToss = async (matchId, tossData) => {
+      setLoading(true);
+      try {
+          const matchRef = doc(db, 'matches', matchId);
+          const updates = { ...tossData };
+
+          // If match has NO balls recorded, we can safely swap the batting/bowling team based on new toss
+          const ballsRecorded = (scoring?.thisOver || []).length > 0 || (scoring?.totalOvers || 0) > 0;
+          if (!ballsRecorded) {
+              const newIsTeam1Batting = (tossData.tossWinner === 'team1' && tossData.tossChoice === 'bat') || 
+                                     (tossData.tossWinner === 'team2' && tossData.tossChoice === 'bowl');
+              
+              updates['scoring.battingTeam'] = newIsTeam1Batting ? 'team1' : 'team2';
+              updates['scoring.bowlingTeam'] = newIsTeam1Batting ? 'team2' : 'team1';
+          }
+
+          await updateDoc(matchRef, updates);
+          
+          // Local update
+          // Deeply merge updates into match
+          const updatedScoring = { ...scoring };
+          if (updates['scoring.battingTeam']) updatedScoring.battingTeam = updates['scoring.battingTeam'];
+          if (updates['scoring.bowlingTeam']) updatedScoring.bowlingTeam = updates['scoring.bowlingTeam'];
+
+          onUpdateLocal({ 
+              ...match, 
+              ...tossData,
+              scoring: updatedScoring
+          });
+          setShowTossModal(false);
+      } catch (e) {
+          console.error(e);
+          alert("Failed to update toss");
+      } finally {
+          setLoading(false);
+      }
+  };
 
   const handleScoreUpdate = async (runs, isExtra = false, extraType = null, isWicket = false, wicketInfo = null) => {
       if (loading) return;
@@ -48,6 +99,9 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
           let strikerId = scoring.strikerId;
           let nonStrikerId = scoring.nonStrikerId;
           
+          // Helper: Current balls in the over to mark wicket timing
+          const currentOverBalls = (scoring.thisOver || []).filter(b => !b.toLowerCase().includes('wd') && !b.toLowerCase().includes('nb')).length;
+
           // Override who is out if specified in wicketInfo (e.g. Run Out Non-Striker)
           // Default logic assumes Striker is out.
           let outBatsmanId = strikerId;
@@ -73,6 +127,21 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                  legalBall = true;
              }
           }
+
+          // --- AUTO RETIRE LOGIC (11 Balls) ---
+          let effectiveIsWicket = isWicket;
+          let effectiveWicketInfo = wicketInfo;
+          let effectiveOutBatsmanId = outBatsmanId;
+
+          if (!isWicket && extraType !== 'wd') {
+              const currentStrikerBalls = (scoring.batsmenStats?.[strikerId]?.balls || 0);
+              if (currentStrikerBalls + ballsFacedAdd >= 11) {
+                  alert(`🔔 UMPIRE NOTIFICATION: ${getName(strikerId)} has faced 11 balls and is now Retired.`);
+                  effectiveIsWicket = true;
+                  effectiveOutBatsmanId = strikerId;
+                  effectiveWicketInfo = { type: 'Retired', fielder: null, fielder2: null };
+              }
+          }
           
           // Construct updates
           const updates = {};
@@ -80,139 +149,88 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
           // 1. Total Score
           updates['scoring.totalRuns'] = increment(totalRunsAdd);
           
-          const ballText = isWicket ? 'W' : 
+          const isRetired = effectiveIsWicket && effectiveWicketInfo?.type === 'Retired';
+          const ballText = isRetired ? 'RT' : 
+                           (effectiveIsWicket ? 'W' : 
                            (isExtra ? `${runs > 0 ? runs : ''}${extraType.toUpperCase()}` : 
-                           (runs === 0 ? '0' : runs.toString()));
+                           (runs === 0 ? '0' : runs.toString())));
 
-          updates['scoring.thisOver'] = arrayUnion(ballText);
+          // Use full array replacement for safety
+          const newOver = [...(scoring.thisOver || []), ballText];
+          updates['scoring.thisOver'] = newOver;
 
           // 2. Strike Rotation (Odd runs)
-          // Run based rotation
+          let finalStrikerId = (runs % 2 !== 0) ? nonStrikerId : strikerId;
+          let finalNonStrikerId = (runs % 2 !== 0) ? strikerId : nonStrikerId;
+          
           if (runs % 2 !== 0) {
-              // Swap logic: update keys in DB.
-               updates['scoring.strikerId'] = nonStrikerId;
-               updates['scoring.nonStrikerId'] = strikerId;
+               updates['scoring.strikerId'] = finalStrikerId;
+               updates['scoring.nonStrikerId'] = finalNonStrikerId;
           }
-          
+
           // 3. Batsman Stats (Attrib to Striker)
-          
           if (extraType !== 'wd' && extraType !== 'b' && extraType !== 'lb') {
-               // Runs logic: If NB, runs count to batsman. Byes/LegByes do NOT.
                updates[`scoring.batsmenStats.${strikerId}.runs`] = increment(runs);
-               
                if (runs === 4) updates[`scoring.batsmenStats.${strikerId}.fours`] = increment(1);
                if (runs === 6) updates[`scoring.batsmenStats.${strikerId}.sixes`] = increment(1);
           }
-          
-          // Always increment balls faced for striker unless it's a Wide
           if (extraType !== 'wd') {
               updates[`scoring.batsmenStats.${strikerId}.balls`] = increment(ballsFacedAdd);
           }
 
           // 4. Bowler Stats
-          // Standard rules: Byes and Leg Byes are NOT charged to the bowler
           const chargedToBowler = (extraType === 'b' || extraType === 'lb') ? 0 : totalRunsAdd;
           updates[`scoring.bowlerStats.${bowlerId}.runs`] = increment(chargedToBowler);
           if (legalBall) {
               updates[`scoring.bowlerStats.${bowlerId}.balls`] = increment(1);
           }
-          if (isWicket) {
-              updates['scoring.totalWickets'] = increment(1);
-              updates[`scoring.bowlerStats.${bowlerId}.wickets`] = increment(1);
-              
-              // Store Wicket Details if provided
-              if (wicketInfo) {
-                  updates[`scoring.batsmenStats.${outBatsmanId}.wicketInfo`] = {
-                      type: wicketInfo.type,
+          
+          if (effectiveIsWicket) {
+              if (!isRetired) updates['scoring.totalWickets'] = increment(1);
+              if (effectiveWicketInfo && effectiveWicketInfo.type !== 'Retired') {
+                  updates[`scoring.bowlerStats.${bowlerId}.wickets`] = increment(1);
+              }
+              if (effectiveWicketInfo) {
+                  updates[`scoring.batsmenStats.${effectiveOutBatsmanId}.wicketInfo`] = {
+                      type: effectiveWicketInfo.type,
                       bowlerId: bowlerId,
-                      fielderId: wicketInfo.fielder || null,
+                      fielderId: effectiveWicketInfo.fielder || null,
+                      fielderId2: effectiveWicketInfo.fielder2 || null,
                       over: scoring.totalOvers || 0,
-                      ball: currentOverBalls + 1
+                      ball: currentOverBalls + 1,
+                      wasStriker: effectiveOutBatsmanId === strikerId
                   };
               }
           }
 
-          await updateDoc(matchRef, updates);
-
-          // --- Post Update Logic (Wicket / End of Over) ---
-          
-          // Prepare optimistic data for check
-          // Updated: Uses local nextBall logic rather than stale 'scoring' state
-          const currentBowlerStats = scoring.bowlerStats?.[bowlerId] || { balls: 0, runs: 0, wickets: 0 };
-          const nextBallCount = currentBowlerStats.balls + (legalBall ? 1 : 0);
-          const isOverEnd = legalBall && (nextBallCount % 6 === 0) && (nextBallCount > 0);
-
-          if (isWicket) {
-               // Wicket Logic: Open New Batsman Modal
-               setWicketData({ 
-                   outBatsman: outBatsmanId,
-                   details: wicketInfo 
-               }); 
-               
-               setShowNewBatsmanModal(true);
-          } else if (isOverEnd) {
-               // Over End Logic: 
-               // 1. Swap Ends (Striker <-> NonStriker) - Just UI or DB?
-               // Ideally DB.
-               // Note: We already updated 'scoring.strikerId' above based on runs.
-               // Now we swap AGAIN for end of over.
-               // We need a separate update or include it in previous?
-               // We can't easily chain updates in one go if logic depends on prev state being odd/even.
-               // But we know 'runs'.
-               
-               // Logic:
-               // Current Striker/NonStriker after run rotation:
-               const currentS = runs % 2 !== 0 ? nonStrikerId : strikerId;
-               const currentNS = runs % 2 !== 0 ? strikerId : nonStrikerId;
-               
-               // End of over swap:
-               const nextS = currentNS;
-               const nextNS = currentS;
-               
-               const overEndUpdates = {
-                   'scoring.strikerId': nextS, 
-                   'scoring.nonStrikerId': nextNS,
-                   'scoring.thisOver': [] // Clear over for next
-               };
-
-               await updateDoc(matchRef, overEndUpdates);
-               
-               setShowNewBowlerModal(true);
+          // Over End Detection (Rotation for next over)
+          const isOverEnd = legalBall && (currentOverBalls + 1 === 6);
+          if (isOverEnd) {
+             // Rotate ends for the NEXT over
+             const nextS = finalNonStrikerId;
+             const nextNS = finalStrikerId;
+             updates['scoring.strikerId'] = nextS;
+             updates['scoring.nonStrikerId'] = nextNS;
+             finalStrikerId = nextS;
+             finalNonStrikerId = nextNS;
           }
 
-          // Continue to local update...
+          // DB UPDATE (Single Atomic Call)
+          await updateDoc(matchRef, updates);
 
-          // Force local refresh (Parent will likely re-fetch via snapshot listener if we had one, but we don't. )
-          // We rely on simple local increment for speed, but for complex state (wicket/over), we really should re-fetch.
-          // Since we don't have a listener in MatchesList (it's getDocs), we need to handle this.
-          // Ideally: MatchesList should use onSnapshot. 
-          // For now, we will assume user won't see updates unless refreshed? 
-          // Wait, MatchesList updates local state on 'onUpdateLocal'.
-          // We must construct 'newScoring' carefully.
-          
-          // Re-fetching full match is safer for "Full Cricket Implementation".
-          // Let's rely on props update? No, parent passes static match.
-          // HACK: We can't easily replicate full logic locally without bugs.
-          // Recommendation: Move MatchesList to use onSnapshot for the active match.
-          // OR: Just manually update critical fields locally.
-          
-          // UPDATED LOCAL LOGIC:
+          // LOCAL OPTIMISTIC UPDATE
           const newLocalScoring = {
               ...scoring,
               totalRuns: (scoring.totalRuns || 0) + totalRunsAdd,
-              totalWickets: isWicket ? (scoring.totalWickets || 0) + 1 : (scoring.totalWickets || 0),
-              
-              // Run-Based Rotation (Initial)
-              strikerId: (runs % 2 !== 0) ? nonStrikerId : strikerId,
-              nonStrikerId: (runs % 2 !== 0) ? strikerId : nonStrikerId,
-              
-              thisOver: [...(scoring.thisOver || []), isWicket ? 'W' : (runs > 0 ? runs : '') + (extraType ? extraType.toUpperCase() : runs === 0 ? '0' : '')],
-              
+              totalWickets: (effectiveIsWicket && !isRetired) ? (scoring.totalWickets || 0) + 1 : (scoring.totalWickets || 0),
+              strikerId: finalStrikerId,
+              nonStrikerId: finalNonStrikerId,
+              thisOver: newOver,
               batsmenStats: {
                   ...scoring.batsmenStats,
                   [strikerId]: {
                       ...scoring.batsmenStats?.[strikerId],
-                      runs: (scoring.batsmenStats?.[strikerId]?.runs || 0) + (extraType==='wd' ? 0 : runs),
+                      runs: (scoring.batsmenStats?.[strikerId]?.runs || 0) + (extraType==='wd' || extraType==='b' || extraType==='lb' ? 0 : runs),
                       balls: (scoring.batsmenStats?.[strikerId]?.balls || 0) + (extraType==='wd' ? 0 : ballsFacedAdd),
                       fours: (scoring.batsmenStats?.[strikerId]?.fours || 0) + (runs === 4 ? 1 : 0),
                       sixes: (scoring.batsmenStats?.[strikerId]?.sixes || 0) + (runs === 6 ? 1 : 0),
@@ -221,48 +239,32 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
               bowlerStats: {
                   ...scoring.bowlerStats,
                   [bowlerId]: {
-                      ...currentBowlerStats,
-                      runs: (currentBowlerStats.runs || 0) + totalRunsAdd,
-                      balls: nextBallCount,
-                      wickets: (currentBowlerStats.wickets || 0) + (isWicket ? 1 : 0),
+                      ...(scoring.bowlerStats?.[bowlerId] || { balls: 0, runs: 0, wickets: 0 }),
+                      runs: (scoring.bowlerStats?.[bowlerId]?.runs || 0) + chargedToBowler,
+                      balls: (scoring.bowlerStats?.[bowlerId]?.balls || 0) + (legalBall ? 1 : 0),
+                      wickets: (scoring.bowlerStats?.[bowlerId]?.wickets || 0) + (effectiveIsWicket && effectiveWicketInfo?.type !== 'Retired' ? 1 : 0),
                   }
               }
           };
-          
-          // Update Wicket Info locally
-          if (isWicket && wicketInfo) {
-              if (newLocalScoring.batsmenStats[outBatsmanId]) {
-                 newLocalScoring.batsmenStats[outBatsmanId].wicketInfo = {
-                      type: wicketInfo.type,
-                      bowlerId: bowlerId,
-                      fielderId: wicketInfo.fielder || null
-                 };
-              }
+
+          if (effectiveIsWicket && effectiveWicketInfo && newLocalScoring.batsmenStats[effectiveOutBatsmanId]) {
+              newLocalScoring.batsmenStats[effectiveOutBatsmanId].wicketInfo = updates[`scoring.batsmenStats.${effectiveOutBatsmanId}.wicketInfo`];
           }
 
-          // End of Over Local Rotation
-          if (isOverEnd) {
-             // Logic:
-             // Current Striker/NonStriker after run rotation:
-             const currentS = runs % 2 !== 0 ? nonStrikerId : strikerId;
-             const currentNS = runs % 2 !== 0 ? strikerId : nonStrikerId;
-             
-             // End of over swap:
-             const nextS = currentNS;
-             const nextNS = currentS;
-             
-             const overEndUpdates = {
-                 'scoring.strikerId': nextS, 
-                 'scoring.nonStrikerId': nextNS,
-                 // DO NOT clear 'scoring.thisOver' here. Let user see full over
-             };
+          onUpdateLocal({ ...match, scoring: newLocalScoring });
 
-             await updateDoc(matchRef, overEndUpdates);
-             
-             setShowNewBowlerModal(true);
-          } else {
-             // Normal update
-             onUpdateLocal({ ...match, scoring: newLocalScoring });
+          // INNINGS END DETECTION
+          const isAllOut = newLocalScoring.totalWickets >= (currentBattingSquad?.length || 11) - 1;
+          const isInningsOver = (isOverEnd && (scoring.totalOvers + 1) >= maxOvers) || isAllOut;
+
+          // MODAL TRIGGERS
+          if (isInningsOver) {
+               setShowInningsEndModal(true);
+          } else if (effectiveIsWicket) {
+               setWicketData({ outBatsman: effectiveOutBatsmanId, details: effectiveWicketInfo }); 
+               setShowNewBatsmanModal(true);
+          } else if (isOverEnd) {
+               setShowNewBowlerModal(true);
           }
 
       } catch (e) {
@@ -296,18 +298,20 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
 
         // Find wickets that happened this over to restore
         const outBatsmen = Object.entries(scoring.batsmenStats || {})
-            .filter(([_, s]) => s.wicketInfo && s.wicketInfo.over === currentOverIndex)
+            .filter(([, s]) => s.wicketInfo && s.wicketInfo.over === currentOverIndex)
             .map(([pid, s]) => ({ pid, ...s.wicketInfo })); // { pid, type, over, ... }
 
         for (const event of overEvents) {
             const isWicket = event.includes('W');
+            const isRetired = event === 'RT';
+            const isDismissal = isWicket || isRetired;
             const isWide = event.toLowerCase().includes('wd');
             const isNb = event.toLowerCase().includes('nb');
             
             let runs = parseInt(event.replace(/\D/g, '') || '0');
             
-            // 1. Recover Wicket (If any)
-            if (isWicket) {
+            // 1. Recover Dismissal (If any)
+            if (isDismissal) {
                  // The current simStriker is the New Batsman.
                  // We must swap him out for the victim.
                  // We assume New Batsman replaced the Out Batsman (simStriker position).
@@ -319,8 +323,11 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                      
                      // Swap active players: simStriker (New) <-> victim (Old)
                      simStriker = victim.pid;
+
+                     if (victim.type !== 'Retired') {
+                        netWickets++;
+                     }
                  }
-                 netWickets++;
             }
             
             // 2. Undo Rotation (Odd Runs)
@@ -394,135 +401,17 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
     }
   };
 
-  const handleNewBatsman = async () => {
-      if (!selectedNewPlayer) return;
-      setLoading(true);
-      try {
-          const matchRef = doc(db, 'matches', match.id);
-          // Current striker is out. New player becomes striker.
-          await updateDoc(matchRef, {
-              'scoring.strikerId': selectedNewPlayer,
-              // Init stats for new player
-              [`scoring.batsmenStats.${selectedNewPlayer}`]: { runs: 0, balls: 0, fours: 0, sixes: 0 }
-          });
-          setShowNewBatsmanModal(false);
-          setSelectedNewPlayer('');
-          
-          // Local update
-          const newScoring = { ...scoring, strikerId: selectedNewPlayer };
-          onUpdateLocal({ ...match, scoring: newScoring });
-
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-  };
-
-  const handleUndo = async () => {
-      if (loading || !scoring.thisOver || scoring.thisOver.length === 0) return;
-      
-      const lastEvent = scoring.thisOver[scoring.thisOver.length - 1]; // e.g. "1", "4wd"
-      if (lastEvent.includes('W')) {
-          alert('Cannot undo wickets. Please reset match or edit manually.');
-          return;
-      }
-
-      setLoading(true);
-      try {
-          let runs = 0;
-          let extraType = null;
-          
-          if (lastEvent.toUpperCase().includes('WD')) extraType = 'wd';
-          else if (lastEvent.toUpperCase().includes('NB')) extraType = 'nb';
-          else if (lastEvent.toUpperCase().includes('LB')) extraType = 'lb';
-          else if (lastEvent.toUpperCase().includes('B')) extraType = 'b';
-          
-          const numPart = lastEvent.replace(/\D/g, '');
-          runs = numPart === '' ? 0 : parseInt(numPart);
-          
-          let totalDed = runs;
-          if (extraType === 'wd' || extraType === 'nb') totalDed += 1; 
-
-          // Identify Striker/NonStriker to revert
-          let currentStriker = scoring.strikerId;
-          let currentNonStriker = scoring.nonStrikerId;
-          const updates = {};
-
-          // Revert Rotation (if odd runs)
-          if (runs % 2 !== 0) {
-              const temp = currentStriker;
-              currentStriker = currentNonStriker;
-              currentNonStriker = temp;
-              updates['scoring.strikerId'] = currentStriker;
-              updates['scoring.nonStrikerId'] = currentNonStriker;
-          }
-          
-          updates['scoring.totalRuns'] = increment(-totalDed);
-          updates['scoring.thisOver'] = scoring.thisOver.slice(0, -1);
-          
-          // Revert Batsman stats
-          const batRunsDed = (extraType === 'wd') ? 0 : runs; // Wide runs don't belong to bat
-          const batBallsDed = (extraType === 'wd') ? 0 : 1;   // Wide doesn't count as ball faced (NB does)
-          
-          updates[`scoring.batsmenStats.${currentStriker}.runs`] = increment(-batRunsDed);
-          updates[`scoring.batsmenStats.${currentStriker}.balls`] = increment(-batBallsDed);
-          if (runs === 4) updates[`scoring.batsmenStats.${currentStriker}.fours`] = increment(-1);
-          if (runs === 6) updates[`scoring.batsmenStats.${currentStriker}.sixes`] = increment(-1);
-
-          // Revert Bowler stats
-          const bowlBallsDed = (extraType === 'wd' || extraType === 'nb') ? 0 : 1;
-          const bowlerRunsDed = (extraType === 'b' || extraType === 'lb') ? 0 : totalDed;
-          updates[`scoring.bowlerStats.${scoring.currentBowlerId}.runs`] = increment(-bowlerRunsDed);
-          updates[`scoring.bowlerStats.${scoring.currentBowlerId}.balls`] = increment(-bowlBallsDed);
-          
-          const matchRef = doc(db, 'matches', match.id);
-          await updateDoc(matchRef, updates);
-          
-          // Local update estimate
-          const newScoring = {
-              ...scoring,
-              totalRuns: (scoring.totalRuns || 0) - totalDed,
-              thisOver: scoring.thisOver.slice(0, -1),
-              strikerId: currentStriker,
-              nonStrikerId: currentNonStriker,
-              batsmenStats: {
-                  ...scoring.batsmenStats,
-                  [currentStriker]: {
-                      ...scoring.batsmenStats?.[currentStriker],
-                      runs: (scoring.batsmenStats?.[currentStriker]?.runs || 0) - batRunsDed,
-                      balls: (scoring.batsmenStats?.[currentStriker]?.balls || 0) - batBallsDed,
-                      fours: (scoring.batsmenStats?.[currentStriker]?.fours || 0) - (runs === 4 ? 1 : 0),
-                      sixes: (scoring.batsmenStats?.[currentStriker]?.sixes || 0) - (runs === 6 ? 1 : 0),
-                  }
-              },
-              bowlerStats: {
-                  ...scoring.bowlerStats,
-                  [scoring.currentBowlerId]: {
-                      ...scoring.bowlerStats?.[scoring.currentBowlerId],
-                      runs: (scoring.bowlerStats?.[scoring.currentBowlerId]?.runs || 0) - totalDed,
-                      balls: (scoring.bowlerStats?.[scoring.currentBowlerId]?.balls || 0) - bowlBallsDed
-                  }
-              }
-          };
-          onUpdateLocal({ ...match, scoring: newScoring });
-
-      } catch (e) {
-          console.error(e);
-          alert('Error undoing: ' + e.message);
-      } finally {
-          setLoading(false);
-      }
-  };
-
   const handleNewBowler = async () => {
       if (!selectedNewPlayer) return;
       setLoading(true);
       try {
           const matchRef = doc(db, 'matches', match.id);
-          // Only change bowler and increment overs. 
-          // Do NOT swap ends here or clear 'thisOver' (cleared after selection for visual continuity)
+          
           await updateDoc(matchRef, {
               'scoring.currentBowlerId': selectedNewPlayer,
-              'scoring.thisOver': [], // Now we clear the over
-              'scoring.totalOvers': increment(1) 
+              'scoring.thisOver': [], 
+              'scoring.totalOvers': increment(1),
+              [`scoring.bowlerStats.${selectedNewPlayer}`]: scoring.bowlerStats?.[selectedNewPlayer] || { overs: 0, balls: 0, runs: 0, wickets: 0, maidens: 0 }
           });
           
           setShowNewBowlerModal(false);
@@ -536,8 +425,246 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
           };
           onUpdateLocal({ ...match, scoring: newScoring });
 
+      } catch (e) {
+          console.error(e);
+          alert("Error changing bowler: " + e.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleEndInnings = async () => {
+      setLoading(true);
+      try {
+          const matchRef = doc(db, 'matches', match.id);
+          const currentInnings = scoring.currentInnings || 1;
+          
+          if (currentInnings === 1) {
+              const innings1 = {
+                  ...scoring,
+                  totalOvers: (scoring.totalOvers || 0) + 1, // Final completed overs
+              };
+
+              // End 1st innings: Save results to 'innings' array and reset 'scoring' for 2nd innings
+              const updates = {
+                  'scoring.currentInnings': 2,
+                  'innings': arrayUnion(innings1),
+                  
+                  // Reset for 2nd innings
+                  'scoring.totalRuns': 0,
+                  'scoring.totalWickets': 0,
+                  'scoring.totalOvers': 0,
+                  'scoring.thisOver': [],
+                  'scoring.battingTeam': scoring.bowlingTeam,
+                  'scoring.bowlingTeam': scoring.battingTeam,
+                  'scoring.strikerId': deleteField(),
+                  'scoring.nonStrikerId': deleteField(),
+                  'scoring.currentBowlerId': deleteField(),
+                  'scoring.batsmenStats': {},
+                  'scoring.bowlerStats': {}
+              };
+
+              await updateDoc(matchRef, updates);
+              
+              // Local update
+              const newScoring = {
+                  ...scoring,
+                  currentInnings: 2,
+                  totalRuns: 0,
+                  totalWickets: 0,
+                  totalOvers: 0,
+                  thisOver: [],
+                  battingTeam: scoring.bowlingTeam,
+                  bowlingTeam: scoring.battingTeam,
+                  strikerId: undefined,
+                  nonStrikerId: undefined,
+                  currentBowlerId: undefined,
+                  batsmenStats: {},
+                  bowlerStats: {}
+              };
+              onUpdateLocal({ 
+                  ...match, 
+                  innings: [...(match.innings || []), innings1],
+                  scoring: newScoring 
+              });
+              
+              setShowInningsEndModal(false);
+              setWicketData(null); 
+              setShowNewBatsmanModal(true); // Prompt for 2nd innings openers
+          } else {
+              // End of Match (2nd innings)
+              await updateDoc(matchRef, { status: 'completed' });
+              alert("Match Over!");
+              onClose();
+          }
+      } catch (e) {
+          console.error(e);
+          alert("Error ending innings");
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleNewBatsman = async () => {
+      if (!selectedNewPlayer || !wicketData) return;
+      setLoading(true);
+      try {
+          const matchRef = doc(db, 'matches', match.id);
+          
+          // ALWAYS fetch fresh data to avoid state desync if a wicket falls on the last ball
+          const freshDoc = await getDoc(matchRef);
+          if (!freshDoc.exists()) return;
+          const freshData = freshDoc.data();
+          const currentScoring = freshData.scoring;
+
+          // Determine which slot the out batsman was in
+          const isStrikerOut = wicketData.outBatsman === currentScoring.strikerId;
+          const targetSlot = isStrikerOut ? 'strikerId' : 'nonStrikerId';
+
+          const updates = {
+              [`scoring.${targetSlot}`]: selectedNewPlayer,
+              // Init stats for new player if not exists
+              [`scoring.batsmenStats.${selectedNewPlayer}`]: currentScoring.batsmenStats?.[selectedNewPlayer] || { runs: 0, balls: 0, fours: 0, sixes: 0 }
+          };
+
+          await updateDoc(matchRef, updates);
+          setShowNewBatsmanModal(false);
+          setSelectedNewPlayer('');
+          
+          // Local update
+          const newScoring = { 
+              ...currentScoring, 
+              [targetSlot]: selectedNewPlayer,
+              batsmenStats: {
+                  ...currentScoring.batsmenStats,
+                  [selectedNewPlayer]: currentScoring.batsmenStats?.[selectedNewPlayer] || { runs: 0, balls: 0, fours: 0, sixes: 0 }
+              }
+          };
+
+          // IF this wicket happened on the last ball of the over, trigger over end swap locally
+          const legalBalls = (newScoring.thisOver || []).filter(b => !b.toLowerCase().includes('wd') && !b.toLowerCase().includes('nb')).length;
+          const isOverEnd = legalBalls >= 6;
+          
+          if (isOverEnd) {
+              // Rotation for next over happens AFTER new batsman is set
+              const nextS = newScoring.nonStrikerId;
+              const nextNS = newScoring.strikerId;
+              
+              newScoring.strikerId = nextS;
+              newScoring.nonStrikerId = nextNS;
+
+              // We also need to update this in the DB since handleScoreUpdate skipped it for the wicket
+              await updateDoc(matchRef, {
+                  'scoring.strikerId': newScoring.strikerId,
+                  'scoring.nonStrikerId': newScoring.nonStrikerId
+              });
+
+              setShowNewBowlerModal(true);
+          }
+
+          onUpdateLocal({ ...match, ...freshData, scoring: newScoring });
+
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
+  };
+
+  const handleUndo = async () => {
+      if (loading || !scoring.thisOver || scoring.thisOver.length === 0) return;
+      
+      const lastEvent = scoring.thisOver[scoring.thisOver.length - 1]; 
+      const isWicket = lastEvent.includes('W');
+      const isRetired = lastEvent === 'RT';
+      const isDismissal = isWicket || isRetired;
+      
+      setLoading(true);
+      try {
+          const matchRef = doc(db, 'matches', match.id);
+          let extraType = null;
+          if (lastEvent.toUpperCase().includes('WD')) extraType = 'wd';
+          else if (lastEvent.toUpperCase().includes('NB')) extraType = 'nb';
+          else if (lastEvent.toUpperCase().includes('LB')) extraType = 'lb';
+          else if (lastEvent.toUpperCase().includes('B')) extraType = 'b';
+          
+          const numPart = lastEvent.replace(/\D/g, '');
+          const runs = numPart === '' ? 0 : parseInt(numPart);
+          let totalDed = runs;
+          if (extraType === 'wd' || extraType === 'nb') totalDed += 1; 
+
+          const updates = {};
+          let newStriker = scoring.strikerId;
+          let newNonStriker = scoring.nonStrikerId;
+          let victimEntry = null;
+
+          // 1. REVERSE DISMISSAL (If applicable)
+          if (isDismissal) {
+              const currentOverIndex = scoring.totalOvers || 0;
+              const currentBallsCount = (scoring.thisOver || []).filter(b => !b.toLowerCase().includes('wd') && !b.toLowerCase().includes('nb')).length;
+              
+              victimEntry = Object.entries(scoring.batsmenStats || {})
+                  .find(([, s]) => s.wicketInfo && s.wicketInfo.over === currentOverIndex && s.wicketInfo.ball === currentBallsCount);
+              
+              if (victimEntry) {
+                  const [victimId, victimStats] = victimEntry;
+                  updates[`scoring.batsmenStats.${victimId}.wicketInfo`] = deleteField();
+                  
+                  if (!isRetired) {
+                      updates['scoring.totalWickets'] = increment(-1);
+                  }
+                  
+                  // Restore player to their the correct slot
+                  if (victimStats.wicketInfo.wasStriker) {
+                      newStriker = victimId;
+                  } else {
+                      newNonStriker = victimId;
+                  }
+              }
+          }
+
+          // 2. REVERSE ROTATION
+          // Note: We reverse rotation based on the runs of the ball we are undoing.
+          if (runs % 2 !== 0) {
+              const temp = newStriker;
+              newStriker = newNonStriker;
+              newNonStriker = temp;
+          }
+
+          updates['scoring.strikerId'] = newStriker;
+          updates['scoring.nonStrikerId'] = newNonStriker;
+          updates['scoring.totalRuns'] = increment(-totalDed);
+          updates['scoring.thisOver'] = scoring.thisOver.slice(0, -1);
+
+          // 3. STATS REVERSAL
+          // We always deduct stats from the person who was STRIKING before rotation reversal
+          // But wait, the rotation reversal above gives us the state BEFORE the ball.
+          // So newStriker is the person who faced the ball.
+          const batRunsDed = (extraType === 'wd') ? 0 : runs;
+          const batBallsDed = (extraType === 'wd') ? 0 : 1;
+          updates[`scoring.batsmenStats.${newStriker}.runs`] = increment(-batRunsDed);
+          updates[`scoring.batsmenStats.${newStriker}.balls`] = increment(-batBallsDed);
+          if (runs === 4) updates[`scoring.batsmenStats.${newStriker}.fours`] = increment(-1);
+          if (runs === 6) updates[`scoring.batsmenStats.${newStriker}.sixes`] = increment(-1);
+
+          const bowlBallsDed = (extraType === 'wd' || extraType === 'nb') ? 0 : 1;
+          const bowlerRunsDed = (extraType === 'b' || extraType === 'lb') ? 0 : totalDed;
+          updates[`scoring.bowlerStats.${scoring.currentBowlerId}.runs`] = increment(-bowlerRunsDed);
+          updates[`scoring.bowlerStats.${scoring.currentBowlerId}.balls`] = increment(-bowlBallsDed);
+          
+          // Only decrement bowler wickets if it wasn't a retirement
+          const victimIsRetired = victimEntry && victimEntry[1].wicketInfo.type === 'Retired';
+          updates[`scoring.bowlerStats.${scoring.currentBowlerId}.wickets`] = increment(isWicket && !victimIsRetired ? -1 : 0);
+
+          await updateDoc(matchRef, updates);
+          
+          // Re-fetch to be 100% sure for UI
+          const fresh = await getDoc(matchRef);
+          onUpdateLocal({ id: fresh.id, ...fresh.data() });
+
+      } catch (e) {
+          console.error(e);
+          alert("Undo failed: " + e.message);
+      } finally {
+          setLoading(false);
+      }
   };
 
   // UI Helpers
@@ -556,7 +683,7 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
   };
 
   // Innings Progress Helpers
-  const currentOverBalls = (scoring.thisOver || []).filter(b => !b.includes('WD') && !b.includes('NB')).length;
+  const currentOverBalls = (scoring.thisOver || []).filter(b => !b.toLowerCase().includes('wd') && !b.toLowerCase().includes('nb')).length;
   const inningsOverDisplay = `${scoring.totalOvers || 0}.${currentOverBalls}`;
   const totalLegalBalls = (scoring.totalOvers || 0) * 6 + currentOverBalls;
 
@@ -586,9 +713,26 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                  </div>
              </div>
          </div>
-         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-bg-primary transition-colors border border-transparent hover:border-border">
-              <X size={20} className="text-text-secondary" />
-         </button>
+         <div className="flex items-center gap-2">
+            {canEditToss && (
+                <button 
+                    onClick={() => setShowTossModal(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-bg-primary hover:bg-bg-tertiary text-text-secondary rounded-lg transition-colors border border-border font-bold text-xs"
+                    title="Correct Toss Mistake"
+                >
+                    <Disc size={14} /> Toss
+                </button>
+            )}
+            <button 
+                onClick={() => setShowScoreboard(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg transition-colors border border-accent/20 font-bold text-xs"
+            >
+                <Zap size={14} /> Scoreboard
+            </button>
+            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-bg-primary transition-colors border border-transparent hover:border-border">
+                <X size={20} className="text-text-secondary" />
+            </button>
+         </div>
       </div>
 
       {/* 2. Main Dashboard Area */}
@@ -600,8 +744,16 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                    
                    {/* Big Score */}
                    <div className="text-center md:text-left">
-                       <div className="text-5xl font-bold tracking-tight text-text-primary tabular-nums">
-                           {scoring.totalRuns}/{scoring.totalWickets}
+                       <div className="flex items-center gap-4 justify-center md:justify-start">
+                           <div className="text-5xl font-bold tracking-tight text-text-primary tabular-nums">
+                               {scoring.totalRuns}/{scoring.totalWickets}
+                           </div>
+                           {scoring.currentInnings === 2 && match.innings?.[0] && (
+                               <div className="flex flex-col border-l border-border pl-4">
+                                   <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">Target</span>
+                                   <span className="text-xl font-bold text-accent tabular-nums">{match.innings[0].totalRuns + 1}</span>
+                               </div>
+                           )}
                        </div>
                        <div className="text-text-secondary text-sm mt-1 font-medium">
                            {inningsOverDisplay} Overs
@@ -764,7 +916,7 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                                 <Trophy size={14} /> +4 Boundary
                             </button>
                             
-                            {(activeExtraType === 'nb' || activeExtraType === 'b' || activeExtraType === 'lb') && (
+                            {(activeExtraType === 'nb') && (
                                 <button 
                                     onClick={() => { handleScoreUpdate(6, true, activeExtraType); setActiveExtraType(null); }} 
                                     className="h-12 col-span-2 flex items-center justify-center gap-2 bg-purple-600 font-black text-white rounded-lg shadow-lg transition-all active:scale-95"
@@ -773,7 +925,7 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                                 </button>
                             )}
                             
-                            {activeExtraType === 'wd' && (
+                            {(activeExtraType === 'wd' || activeExtraType === 'b' || activeExtraType === 'lb') && (
                                 <div className="col-span-2" /> 
                             )}
                       </div>
@@ -832,11 +984,11 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                                 handleScoreUpdate(6);
                             }
                         }} 
-                        disabled={activeExtraType === 'wd'}
+                        disabled={activeExtraType === 'wd' || activeExtraType === 'b' || activeExtraType === 'lb'}
                         className={`h-12 font-black text-lg rounded-lg hover:opacity-90 active:scale-95 transition-all shadow-lg ${
                             activeExtraType 
                             ? (activeExtraType === 'nb' ? 'bg-orange-500 shadow-orange-500/20' : 
-                               activeExtraType === 'wd' ? 'bg-bg-tertiary opacity-50 cursor-not-allowed' :
+                               (activeExtraType === 'wd' || activeExtraType === 'lb' || activeExtraType === 'b') ? 'bg-bg-tertiary opacity-50 cursor-not-allowed' :
                                'bg-purple-600 shadow-purple-600/20')
                             : 'bg-purple-600 shadow-purple-600/20'
                         } text-white`}
@@ -845,7 +997,7 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                     </button>
                    <button 
                         onClick={() => {
-                           setWicketDetails({ type: 'Bowled', fielder: '', who: scoring.strikerId });
+                           setWicketDetails({ type: 'Bowled', fielder: '', fielder2: '', who: scoring.strikerId });
                            setShowWicketDetailsModal(true);
                        }}
                        className="h-12 bg-error text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:opacity-90 shadow-lg shadow-error/20 active:scale-95 transition-all flex items-center justify-center gap-1"
@@ -907,6 +1059,14 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
               </div>
           </div>
       </div>
+
+       {/* --- TOSS MODAL (CORRECTION) --- */}
+       <TossModal 
+            isOpen={showTossModal}
+            onClose={() => setShowTossModal(false)}
+            match={match}
+            onSave={handleSaveToss}
+       />
 
        {/* --- NEW BATSMAN MODAL --- */}
        <AnimatePresence>
@@ -1020,18 +1180,38 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
 
                             {/* Fielder (Conditional) */}
                             {['Caught', 'Run Out', 'Stumped'].includes(wicketDetails.type) && (
-                                <div>
-                                    <label className="block text-xs font-bold text-text-tertiary mb-2 uppercase">Fielder involved</label>
-                                    <select 
-                                        className="w-full p-3 bg-bg-primary rounded-lg border border-border text-text-primary outline-none focus:border-accent focus:ring-2 focus:ring-accent/10"
-                                        value={wicketDetails.fielder}
-                                        onChange={(e) => setWicketDetails({...wicketDetails, fielder: e.target.value})}
-                                    >
-                                        <option value="">Select Fielder</option>
-                                        {getPlayers(currentBowlingSquad).map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-text-tertiary mb-1 uppercase tracking-wider">
+                                            {wicketDetails.type === 'Run Out' ? 'Throw by' : 'Fielder'}
+                                        </label>
+                                        <select 
+                                            className="w-full p-3 bg-bg-primary rounded-lg border border-border text-text-primary outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 sm:text-sm"
+                                            value={wicketDetails.fielder}
+                                            onChange={(e) => setWicketDetails({...wicketDetails, fielder: e.target.value})}
+                                        >
+                                            <option value="">Select Fielder</option>
+                                            {getPlayers(currentBowlingSquad).map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {wicketDetails.type === 'Run Out' && (
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-text-tertiary mb-1 uppercase tracking-wider">Stumped by / Assisted</label>
+                                            <select 
+                                                className="w-full p-3 bg-bg-primary rounded-lg border border-border text-text-primary outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 sm:text-sm"
+                                                value={wicketDetails.fielder2}
+                                                onChange={(e) => setWicketDetails({...wicketDetails, fielder2: e.target.value})}
+                                            >
+                                                <option value="">Select Fielder</option>
+                                                {getPlayers(currentBowlingSquad).map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -1084,6 +1264,53 @@ export default function ScoringInterface({ isOpen, match, users, onClose, onUpda
                 </motion.div>
             )}
        </AnimatePresence>
+
+       {/* --- INNINGS END MODAL --- */}
+       <AnimatePresence>
+            {showInningsEndModal && (
+                <motion.div 
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+                >
+                    <div className="w-full max-w-sm bg-bg-secondary rounded-2xl shadow-2xl overflow-hidden border border-border text-center">
+                        <div className="p-8">
+                            <div className="w-20 h-20 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <Trophy size={40} className="text-accent" />
+                            </div>
+                            <h2 className="text-2xl font-black text-text-primary uppercase tracking-tighter mb-2">Innings Complete!</h2>
+                            <p className="text-text-secondary text-sm mb-8">
+                                {scoring.currentInnings === 1 
+                                    ? `First innings finished with ${scoring.totalRuns}/${scoring.totalWickets}. Ready to start the second innings?`
+                                    : "Match has concluded. View the final result in the scoreboard."
+                                }
+                            </p>
+                            
+                            <div className="space-y-3">
+                                <button
+                                    onClick={handleEndInnings}
+                                    className="w-full py-4 bg-accent text-white font-black rounded-xl hover:opacity-90 shadow-lg shadow-accent/20 transition-all uppercase tracking-widest"
+                                >
+                                    {scoring.currentInnings === 1 ? 'Start 2nd Innings' : 'Complete Match'}
+                                </button>
+                                <button
+                                    onClick={() => setShowInningsEndModal(false)}
+                                    className="w-full py-3 bg-bg-primary text-text-tertiary font-bold rounded-lg hover:text-text-primary transition-colors"
+                                >
+                                    Back to Scoring (Undo/Fix)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+       </AnimatePresence>
+
+       <ScoreboardModal 
+            isOpen={showScoreboard}
+            onClose={() => setShowScoreboard(false)}
+            match={match}
+            users={users}
+       />
 
     </div>
   );

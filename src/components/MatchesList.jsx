@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { collection, query, orderBy, getDocs, doc, deleteDoc, updateDoc, arrayUnion, arrayRemove, deleteField } from 'firebase/firestore';
 import { db } from '../firebase';
 import { format } from 'date-fns';
-import { MapPin, Clock, Trophy, Swords, Trash2, Calendar, Loader2, CheckCircle, Users, Navigation, Disc, Play, RotateCcw } from 'lucide-react';
+import { MapPin, Clock, Trophy, Swords, Trash2, Calendar, Loader2, CheckCircle, Users, Navigation, Disc, Play, RotateCcw, Zap } from 'lucide-react';
 import { parseLocalDate } from '../utils/dateHelpers';
 import PlayerStatusModal from './PlayerStatusModal';
 import TossModal from './TossModal';
 import ScoringSetupModal from './ScoringSetupModal';
+import ScoreboardModal from './ScoreboardModal';
 
 export default function MatchesList({ isAdmin, user, users, setActiveScoringMatch }) {
   const [matches, setMatches] = useState([]);
@@ -15,6 +16,8 @@ export default function MatchesList({ isAdmin, user, users, setActiveScoringMatc
   const [statusModalMatch, setStatusModalMatch] = useState(null);
   const [tossModalMatch, setTossModalMatch] = useState(null);
   const [scoringSetupMatch, setScoringSetupMatch] = useState(null);
+  const [scoreboardMatch, setScoreboardMatch] = useState(null);
+  const [editingOversId, setEditingOversId] = useState(null);
 
   useEffect(() => {
     async function fetchMatches() {
@@ -139,6 +142,17 @@ export default function MatchesList({ isAdmin, user, users, setActiveScoringMatc
     }
   };
 
+  const handleUpdateFormat = async (matchId, newFormat) => {
+    try {
+        const matchRef = doc(db, 'matches', matchId);
+        await updateDoc(matchRef, { format: newFormat });
+        setMatches(matches.map(m => m.id === matchId ? { ...m, format: newFormat } : m));
+        setEditingOversId(null);
+    } catch (e) {
+        alert("Failed to update format");
+    }
+  };
+
   const handleStartMatchInteraction = (match) => {
       // If toss hasn't happened yet, warn or allow anyway? 
       // Ideally toss should happen.
@@ -255,11 +269,43 @@ export default function MatchesList({ isAdmin, user, users, setActiveScoringMatc
                     <Calendar size={14} />
                     {dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                  </div>
-                 {match.format && (
-                     <span className="text-xs font-bold text-text-tertiary bg-bg-primary/50 px-2 py-1 rounded">
-                         {match.format}
-                     </span>
-                 )}
+                 <div className="flex items-center gap-2">
+                    {editingOversId === match.id ? (
+                        <select 
+                            autoFocus
+                            className="text-xs font-bold bg-bg-primary border border-accent rounded px-1 py-0.5 text-text-primary focus:outline-none"
+                            value={match.format}
+                            onChange={(e) => handleUpdateFormat(match.id, e.target.value)}
+                            onBlur={() => setEditingOversId(null)}
+                        >
+                            <option value="T20">T20 (20 Overs)</option>
+                            {[...Array(27)].map((_, i) => {
+                                const o = 4 + i;
+                                return <option key={o} value={`${o} Overs`}>{o} Overs</option>
+                            })}
+                            <option value="35 Overs">35 Overs</option>
+                            <option value="40 Overs">40 Overs</option>
+                            <option value="Friendly">Friendly</option>
+                        </select>
+                    ) : (
+                        <div className="flex items-center gap-1.5">
+                            {match.format && (
+                                <span className="text-xs font-bold text-text-tertiary bg-bg-primary/50 px-2 py-1 rounded">
+                                    {match.format}
+                                </span>
+                            )}
+                            {isAdmin && (
+                                <button 
+                                    onClick={() => setEditingOversId(match.id)}
+                                    className="p-1 text-text-tertiary hover:text-accent transition-colors"
+                                    title="Edit Overs"
+                                >
+                                    <Trophy size={12} />
+                                </button>
+                            )}
+                        </div>
+                    )}
+                 </div>
              </div>
              
              {/* Captains Display */}
@@ -322,19 +368,18 @@ export default function MatchesList({ isAdmin, user, users, setActiveScoringMatc
                  {canManageToss && (
                     <div className="grid grid-cols-[1fr_auto] gap-2 p-2 bg-bg-primary/40 rounded-lg border border-border/50">
                         <div className="grid grid-cols-2 gap-2">
-                             {/* Win Toss */}
-                             {!match.tossWinner ? (
-                                <button
-                                    onClick={() => setTossModalMatch(match)}
-                                    className="flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-all border border-border"
-                                >
-                                    <Disc size={14} /> Win Toss
-                                </button>
-                             ) : (
-                                <div className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-bg-secondary/50 text-text-secondary border border-border border-dashed cursor-default">
-                                    <CheckCircle size={12} /> Toss Done
-                                </div>
-                             )}
+                             {/* Toss Action */}
+                             <button
+                                 onClick={() => setTossModalMatch(match)}
+                                 className={`flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all border ${
+                                     !match.tossWinner 
+                                     ? 'bg-bg-secondary text-text-primary hover:bg-bg-tertiary border-border' 
+                                     : 'bg-bg-secondary/50 text-text-secondary border-border border-dashed hover:border-accent hover:text-accent'
+                                 }`}
+                             >
+                                 <Disc size={14} /> 
+                                 {!match.tossWinner ? 'Win Toss' : 'Edit Toss'}
+                             </button>
 
                              {/* Start / Score Match */}
                              {match.status !== 'active' ? (
@@ -354,17 +399,39 @@ export default function MatchesList({ isAdmin, user, users, setActiveScoringMatc
                              )}
                         </div>
 
-                        {/* Reset Button */}
-                        {(match.tossWinner || match.status === 'active' || isAdmin) && (
-                            <button
-                                onClick={() => handleResetMatch(match.id)}
-                                className="w-10 flex items-center justify-center rounded-lg bg-bg-secondary text-error hover:bg-error/10 border border-border hover:border-error/30 transition-all"
-                                title="Reset Match"
-                            >
-                                <RotateCcw size={16} />
-                            </button>
-                        )}
+                        {/* Reset & Delete Column */}
+                        <div className="flex flex-col gap-2">
+                            {(match.tossWinner || match.status === 'active' || isAdmin) && (
+                                <button
+                                    onClick={() => handleResetMatch(match.id)}
+                                    className="w-10 h-full flex items-center justify-center rounded-lg bg-bg-secondary text-error hover:bg-error/10 border border-border hover:border-error/30 transition-all"
+                                    title="Reset Match"
+                                >
+                                    <RotateCcw size={16} />
+                                </button>
+                            )}
+                            {isAdmin && (
+                                <button
+                                    onClick={() => handleDelete(match.id)}
+                                    className="w-10 h-full flex items-center justify-center rounded-lg bg-bg-secondary text-error hover:bg-error/10 border border-border hover:border-error/30 transition-all"
+                                    title="Delete Match"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            )}
+                        </div>
                     </div>
+                 )}
+
+                 {/* Scoreboard Button for Everyone */}
+                 {match.scoring && (
+                    <button
+                        onClick={() => setScoreboardMatch(match)}
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold bg-bg-tertiary text-text-primary border border-border hover:border-accent transition-all group/sb"
+                    >
+                        <Zap size={14} className="text-accent group-hover/sb:scale-110 transition-transform" /> 
+                        View Full Scoreboard
+                    </button>
                  )}
 
                  {/* Player Participation Controls */}
@@ -457,6 +524,13 @@ export default function MatchesList({ isAdmin, user, users, setActiveScoringMatc
         users={users}
         onClose={() => setScoringSetupMatch(null)}
         onStartScoring={handleStartScoring}
+      />
+
+      <ScoreboardModal 
+        isOpen={!!scoreboardMatch}
+        match={scoreboardMatch}
+        users={users}
+        onClose={() => setScoreboardMatch(null)}
       />
     </div>
   );

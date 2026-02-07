@@ -71,7 +71,7 @@ export default function CreateMatchModal({ isOpen, onClose, date, onCreate, savi
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Format</label>
+              <label className="block text-xs font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Format / Overs</label>
               <div className="relative">
                 <Trophy size={16} className="absolute left-3 top-3.5 text-text-tertiary" />
                 <select 
@@ -79,10 +79,18 @@ export default function CreateMatchModal({ isOpen, onClose, date, onCreate, savi
                   onChange={(e) => setFormData({...formData, format: e.target.value})}
                   className="w-full pl-10 p-3 bg-bg-primary rounded-lg border border-border text-text-primary focus:outline-none focus:border-accent transition-colors appearance-none"
                 >
-                  <option className="bg-bg-primary text-text-primary">40 Overs</option>
-                  <option className="bg-bg-primary text-text-primary">T20</option>
-                  <option className="bg-bg-primary text-text-primary">35 Overs</option>
-                  <option className="bg-bg-primary text-text-primary">Friendly</option>
+                  <option value="T20">T20 (20 Overs)</option>
+                  {[...Array(27)].map((_, i) => {
+                    const overs = 4 + i;
+                    return (
+                      <option key={overs} value={`${overs} Overs`}>
+                        {overs} Overs
+                      </option>
+                    );
+                  })}
+                  <option value="35 Overs">35 Overs</option>
+                  <option value="40 Overs">40 Overs</option>
+                  <option value="Friendly">Friendly</option>
                 </select>
               </div>
             </div>

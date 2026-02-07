@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trophy, Disc } from 'lucide-react';
 
@@ -6,6 +6,14 @@ export default function TossModal({ isOpen, onClose, match, onSave }) {
   const [winner, setWinner] = useState(null); // 'team1' or 'team2'
   const [choice, setChoice] = useState(null); // 'bat' or 'bowl'
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sync with match data when opening for correction
+  useEffect(() => {
+    if (isOpen && match) {
+      setWinner(match.tossWinner || null);
+      setChoice(match.tossChoice || null);
+    }
+  }, [isOpen, match]);
 
   if (!isOpen || !match) return null;
 

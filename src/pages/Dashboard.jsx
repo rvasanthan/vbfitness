@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LogOut, 
@@ -76,6 +76,22 @@ export default function Dashboard({
     setIsGuestModalOpen(false);
     setGuestCount(names.length);
     onSetStatus('in', names);
+  };
+
+  const handleDeleteMatch = async () => {
+    if (!match?.id) return;
+    if (!confirm('Are you sure you want to delete this match? This will remove it from the schedule.')) return;
+    
+    setCreatingMatch(true); // Reuse loading state
+    try {
+        await deleteDoc(doc(db, 'matches', match.id));
+        setMatch(null);
+    } catch (e) {
+        console.error("Error deleting match:", e);
+        alert("Failed to delete match");
+    } finally {
+        setCreatingMatch(false);
+    }
   };
 
   useEffect(() => {
@@ -758,25 +774,62 @@ export default function Dashboard({
                            <Swords size={16} className="text-accent" />
                            {match?.opponent ? `vs ${match.opponent}` : 'Match Day'}
                         </h3>
-                        {isAdmin && (
-                            <button 
-                                onClick={handleAutoAssign}
-                                className="p-1.5 rounded-lg bg-bg-secondary text-accent border border-border hover:border-accent hover:bg-accent/10 transition-colors"
-                                title="Auto-Assign Captains (Round Robin)"
-                                disabled={creatingMatch}
-                            >
-                                {creatingMatch ? <div className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin" /> : <Wand2 size={14} />}
-                            </button>
-                        )}
-                        {match && (
-                           <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${match.status === 'active' ? 'bg-success/20 text-success' : 'bg-bg-secondary text-text-tertiary'}`}>
-                              {match.status}
-                           </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                            {isAdmin && (
+                                <>
+                                    <button 
+                                        onClick={handleDeleteMatch}
+                                        className="p-1.5 rounded-lg bg-bg-secondary text-error border border-border hover:border-error hover:bg-error/10 transition-colors"
+                                        title="Delete Match"
+                                        disabled={creatingMatch}
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                    <button 
+                                        onClick={handleAutoAssign}
+                                        className="p-1.5 rounded-lg bg-bg-secondary text-accent border border-border hover:border-accent hover:bg-accent/10 transition-colors"
+                                        title="Auto-Assign Captains (Round Robin)"
+                                        disabled={creatingMatch}
+                                    >
+                                        {creatingMatch ? <div className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin" /> : <Wand2 size={14} />}
+                                    </button>
+                                </>
+                            )}
+                            {match && (
+                               <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${match.status === 'active' ? 'bg-success/20 text-success' : 'bg-bg-secondary text-text-tertiary'}`}>
+                                  {match.status}
+                               </span>
+                            )}
+                        </div>
                       </div>
                       <div className="text-xs text-text-tertiary space-y-1">
                          <p>📍 {match?.venue || 'Rahway River Park'}</p>
-                         <p>⏰ {match?.time || '13:00'} • {match?.format || '40 Overs'}</p>
+                         <div className="flex items-center gap-2">
+                            <span>⏰ {match?.time || '13:00'} • </span>
+                            {isAdmin ? (
+                                <select 
+                                    className="bg-bg-secondary border border-border rounded px-1 py-0.5 text-text-primary focus:outline-none focus:border-accent"
+                                    value={match?.format || '40 Overs'}
+                                    onChange={async (e) => {
+                                        const newFormat = e.target.value;
+                                        const matchRef = doc(db, 'matches', match.id);
+                                        await updateDoc(matchRef, { format: newFormat });
+                                        setMatch({ ...match, format: newFormat });
+                                    }}
+                                >
+                                    <option value="T20">T20 (20 Overs)</option>
+                                    {[...Array(27)].map((_, i) => {
+                                        const o = 4 + i;
+                                        return <option key={o} value={`${o} Overs`}>{o} Overs</option>
+                                    })}
+                                    <option value="35 Overs">35 Overs</option>
+                                    <option value="40 Overs">40 Overs</option>
+                                    <option value="Friendly">Friendly</option>
+                                </select>
+                            ) : (
+                                <span>{match?.format || '40 Overs'}</span>
+                            )}
+                         </div>
                       </div>
 
                       {(match?.captain1Id || match?.captain2Id) && (
